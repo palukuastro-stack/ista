@@ -151,7 +151,7 @@ export function ApparitoratStudents() {
 
     const headerRow = worksheet.lastRow
     if (headerRow) {
-      headerRow.eachCell((cell) => {
+      headerRow.eachCell((cell: import("exceljs").Cell) => {
         cell.font = { bold: true }
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0066CC" } }
         cell.font = { bold: true, color: { argb: "FFFFFFFF" } }
@@ -169,7 +169,7 @@ export function ApparitoratStudents() {
       ])
     })
 
-    worksheet.columns.forEach(col => { col.width = 20 })
+    worksheet.columns.forEach((col: Partial<import("exceljs").Column>) => { col.width = 20 })
 
     const buffer = await workbook.xlsx.writeBuffer()
     const blob = new Blob([buffer], {
