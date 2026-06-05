@@ -1,4 +1,3 @@
-// src/pages/apparitorat/ApparitoratStudents.tsx
 import { useMemo, useState } from "react"
 import { Search, FileDown, FileSpreadsheet } from "lucide-react"
 import { PageHeader } from "@/components/ui/PageHeader"
@@ -21,7 +20,7 @@ import { EditStudentDialog } from "./EditStudentDialog"
 import locales from "@/lib/locales.json"
 import { jsPDF } from "jspdf"
 import "jspdf-autotable"
-import * as XLSX from "xlsx"
+import ExcelJS from "exceljs"
 
 interface StudentRow extends Student {
   facultyCode: string
@@ -63,7 +62,6 @@ export function ApparitoratStudents() {
       ? data?.faculties.find(f => f.id === faculty)?.name
       : locales.apparitorat.all_faculties
 
-    // Header
     const img = new Image()
     img.src = "/ista.jpeg"
     img.onload = () => {
@@ -122,7 +120,7 @@ export function ApparitoratStudents() {
     toast.success("PDF généré avec succès")
   }
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     const promotionName = promotion !== "all"
       ? data?.promotions.find(p => p.id === promotion)?.name
       : locales.apparitorat.list_type_all
@@ -130,33 +128,59 @@ export function ApparitoratStudents() {
       ? data?.faculties.find(f => f.id === faculty)?.name
       : locales.apparitorat.all_faculties
 
-    // Prepare header rows
-    const headerData = [
-      [locales.apparitorat.university_name],
-      ["INSTITUT SUPÉRIEUR DES TECHNIQUES APPLIQUÉES"],
-      [],
-      [locales.apparitorat.student_list.toUpperCase()],
-      [`${locales.apparitorat.faculty}: ${facultyName}`],
-      [`${locales.apparitorat.promotion}: ${promotionName}`],
-      [`Date: ${new Date().toLocaleDateString()}`],
-      []
-    ]
+    const workbook = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet("Students")
 
-    const tableData = filtered.map(s => ({
-      [locales.apparitorat.matricule]: s.matricule,
-      [locales.apparitorat.student_label]: `${s.firstName} ${s.lastName}`,
-      [locales.apparitorat.faculty]: s.facultyCode,
-      [locales.apparitorat.promotion]: s.promotionName,
-      [locales.apparitorat.phone_label]: s.phone,
-      [locales.apparitorat.status]: s.status
-    }))
+    worksheet.addRow([locales.apparitorat.university_name])
+    worksheet.addRow(["INSTITUT SUPÉRIEUR DES TECHNIQUES APPLIQUÉES"])
+    worksheet.addRow([])
+    worksheet.addRow([locales.apparitorat.student_list.toUpperCase()])
+    worksheet.addRow([`${locales.apparitorat.faculty}: ${facultyName}`])
+    worksheet.addRow([`${locales.apparitorat.promotion}: ${promotionName}`])
+    worksheet.addRow([`Date: ${new Date().toLocaleDateString()}`])
+    worksheet.addRow([])
 
-    const worksheet = XLSX.utils.aoa_to_sheet(headerData)
-    XLSX.utils.sheet_add_json(worksheet, tableData, { origin: "A9" })
+    worksheet.addRow([
+      locales.apparitorat.matricule,
+      locales.apparitorat.student_label,
+      locales.apparitorat.faculty,
+      locales.apparitorat.promotion,
+      locales.apparitorat.phone_label,
+      locales.apparitorat.status,
+    ])
 
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Students")
-    XLSX.writeFile(workbook, `liste_etudiants_${promotionName}.xlsx`)
+    const headerRow = worksheet.lastRow
+    if (headerRow) {
+      headerRow.eachCell((cell) => {
+        cell.font = { bold: true }
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0066CC" } }
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" } }
+      })
+    }
+
+    filtered.forEach(s => {
+      worksheet.addRow([
+        s.matricule,
+        `${s.firstName} ${s.lastName}`,
+        s.facultyCode,
+        s.promotionName,
+        s.phone,
+        s.status,
+      ])
+    })
+
+    worksheet.columns.forEach(col => { col.width = 20 })
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `liste_etudiants_${promotionName}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
     toast.success("Excel généré avec succès")
   }
 
