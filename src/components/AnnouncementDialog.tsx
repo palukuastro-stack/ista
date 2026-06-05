@@ -13,21 +13,27 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { addAnnouncement } from "@/lib/store"
 import { useAuth } from "@/contexts/AuthContext"
 import { usePageData } from "@/hooks/usePageData"
+import { announcementApi } from "@/lib/api"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
-import type { Role } from "@/types"
+import type { AppData } from "@/types"
 
 interface AnnouncementDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSuccess?: () => void
 }
 
-export function AnnouncementDialog({ open, onOpenChange }: AnnouncementDialogProps) {
+const selector = (d: AppData) => ({
+  faculties: d.faculties,
+  courses: d.courses
+})
+
+export function AnnouncementDialog({ open, onOpenChange, onSuccess }: AnnouncementDialogProps) {
   const { user } = useAuth()
-  const { data } = usePageData(d => d)
+  const { data } = usePageData(selector)
 
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
@@ -40,30 +46,33 @@ export function AnnouncementDialog({ open, onOpenChange }: AnnouncementDialogPro
   const canCreateFacultyAnnouncement = user?.role === "secretariat_faculte"
   const canCreateCourse = user?.role === "teacher"
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
-    const newAnnouncement = {
-      id: `a-${Date.now()}`,
-      title,
-      body,
-      author: user?.firstName + " " + user?.lastName,
-      date: new Date().toISOString().split("T")[0],
-      audience: (scope === "global" ? "all" : "student") as any,
-      priority,
-      scope,
-      targetId: scope === "global" ? undefined : targetId,
-    }
+    try {
+      await announcementApi.create({
+        title,
+        body,
+        author: user?.firstName + " " + user?.lastName,
+        date: new Date().toISOString().split("T")[0],
+        audience: (scope === "global" ? "all" : "student") as any,
+        priority,
+        scope,
+        targetId: scope === "global" ? undefined : targetId,
+      })
 
-    setTimeout(() => {
-      addAnnouncement(newAnnouncement)
-      setIsLoading(false)
-      onOpenChange(false)
       toast.success("Annonce créée avec succès")
+      onSuccess?.()
+      onOpenChange(false)
       setTitle("")
       setBody("")
-    }, 800)
+    } catch (err) {
+      toast.error("Erreur lors de la création de l'annonce")
+      console.error(err)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (

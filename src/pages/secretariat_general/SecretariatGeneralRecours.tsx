@@ -1,6 +1,6 @@
 // src/pages/secretariat_general/SecretariatGeneralRecours.tsx
 import { useState } from "react"
-import { AlertCircle, CheckCircle2, XCircle, Clock } from "lucide-react"
+import { AlertCircle, CheckCircle2, XCircle, Clock, Loader2 } from "lucide-react"
 import { PageHeader } from "@/components/ui/PageHeader"
 import { KPICard } from "@/components/ui/KPICard"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -22,10 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useStore } from "@/hooks/usePageData"
-import { resolveGradeAppeal } from "@/lib/store"
-import type { GradeAppeal } from "@/types"
+import { usePageData } from "@/hooks/usePageData"
+import { appealApi } from "@/lib/api"
+import type { GradeAppeal, AppData } from "@/types"
 import locales from "@/lib/locales.json"
+import { Loader } from "@/components/ui/Loader"
+import { toast } from "sonner"
 
 interface AppealRow extends GradeAppeal {
   studentName: string
@@ -40,42 +42,59 @@ const STATUS_CONFIG = {
 }
 
 export function SecretariatGeneralRecours() {
-  const store = useStore()
+  const { data, loading, refresh } = usePageData((d: AppData) => {
+    const appeals: AppealRow[] = d.gradeAppeals.map((a) => {
+      const student = d.students.find((s) => s.id === a.studentId)
+      const course = d.courses.find((c) => c.id === a.courseId)
+      const grade = d.grades.find((g) => g.id === a.gradeId)
+      return {
+        ...a,
+        studentName: student ? `${student.firstName} ${student.lastName}` : a.studentId,
+        courseName: course?.name ?? "Cours",
+        currentScore: grade?.score ?? 0,
+      }
+    })
+    return { appeals }
+  })
+
   const [statusFilter, setStatusFilter] = useState<"all" | GradeAppeal["status"]>("all")
   const [resolveTarget, setResolveTarget] = useState<AppealRow | null>(null)
   const [decision, setDecision] = useState<"approved" | "rejected">("approved")
   const [response, setResponse] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const appeals: AppealRow[] = store.gradeAppeals.map((a) => {
-    const student = store.students.find((s) => s.id === a.studentId)
-    const course = store.courses.find((c) => c.id === a.courseId)
-    const grade = store.grades.find((g) => g.id === a.gradeId)
-    return {
-      ...a,
-      studentName: student ? `${student.firstName} ${student.lastName}` : a.studentId,
-      courseName: course?.name ?? "Cours",
-      currentScore: grade?.score ?? 0,
-    }
-  })
+  if (loading || !data) return <Loader fullHeight />
+
+  const { appeals } = data
 
   const filtered =
-    statusFilter === "all" ? appeals : appeals.filter((a) => a.status === statusFilter)
+    statusFilter === "all" ? appeals : appeals.filter((a: any) => a.status === statusFilter)
 
-  const pending = appeals.filter((a) => a.status === "pending").length
-  const approved = appeals.filter((a) => a.status === "approved").length
-  const rejected = appeals.filter((a) => a.status === "rejected").length
+  const pending = appeals.filter((a: any) => a.status === "pending").length
+  const approved = appeals.filter((a: any) => a.status === "approved").length
+  const rejected = appeals.filter((a: any) => a.status === "rejected").length
 
-  function handleResolve() {
+  async function handleResolve() {
     if (!resolveTarget || !response.trim()) return
-    resolveGradeAppeal(resolveTarget.id, decision, response.trim())
-    setResolveTarget(null)
-    setResponse("")
+    setIsSubmitting(true)
+    try {
+      await appealApi.resolve(resolveTarget.id, decision, response.trim())
+      toast.success("Recours traité avec succès")
+      await refresh()
+      setResolveTarget(null)
+      setResponse("")
+    } catch (err) {
+      toast.error("Erreur lors du traitement")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
     <>
       <div className="flex flex-wrap gap-3 items-center">
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
           <SelectTrigger className="flex-1 sm:w-48 sm:flex-none">
             <SelectValue placeholder={locales.apparitorat.all_status} />
           </SelectTrigger>
@@ -120,14 +139,14 @@ export function SecretariatGeneralRecours() {
               <p className="text-sm text-muted-foreground">
                 {statusFilter === "all"
                   ? "Aucun recours soumis pour le moment."
-                  : `Aucun recours avec le statut « ${STATUS_CONFIG[statusFilter as GradeAppeal["status"]]?.label} ».`}
+                  : `Aucun recours avec le statut « ${(STATUS_CONFIG as any)[statusFilter as any]?.label} ».`}
               </p>
             </div>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
-          {filtered.map((a) => (
+          {filtered.map((a: any) => (
             <Card key={a.id}>
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-3">
@@ -140,9 +159,9 @@ export function SecretariatGeneralRecours() {
                   </div>
                   <Badge
                     variant="outline"
-                    className={`shrink-0 text-xs ${STATUS_CONFIG[a.status].class}`}
+                    className={`shrink-0 text-xs ${(STATUS_CONFIG as any)[a.status].class}`}
                   >
-                    {STATUS_CONFIG[a.status].label}
+                    {(STATUS_CONFIG as any)[a.status].label}
                   </Badge>
                 </div>
               </CardHeader>
@@ -197,7 +216,7 @@ export function SecretariatGeneralRecours() {
               </div>
               <div className="space-y-1.5">
                 <Label>Décision</Label>
-                <Select value={decision} onValueChange={(v) => setDecision(v as typeof decision)}>
+                <Select value={decision} onValueChange={(v) => setDecision(v as any)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -219,11 +238,11 @@ export function SecretariatGeneralRecours() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setResolveTarget(null); setResponse("") }}>
+            <Button variant="outline" onClick={() => { setResolveTarget(null); setResponse("") }} disabled={isSubmitting}>
               Annuler
             </Button>
-            <Button onClick={handleResolve} disabled={!response.trim()}>
-              Confirmer la décision
+            <Button onClick={handleResolve} disabled={!response.trim() || isSubmitting}>
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "Confirmer la décision"}
             </Button>
           </DialogFooter>
         </DialogContent>

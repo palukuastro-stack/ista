@@ -1,6 +1,0 @@
-2026/06/05 15:24:28 connecting to database: pinging database: failed to connect to `user=user database=db`:
-	127.0.0.1:5432 (localhost): dial error: dial tcp 127.0.0.1:5432: connect: connection refused
-	[::1]:5432 (localhost): dial error: dial tcp [::1]:5432: connect: connection refused
-	127.0.0.1:5432 (localhost): dial error: dial tcp 127.0.0.1:5432: connect: connection refused
-	[::1]:5432 (localhost): dial error: dial tcp [::1]:5432: connect: connection refused
-exit status 1

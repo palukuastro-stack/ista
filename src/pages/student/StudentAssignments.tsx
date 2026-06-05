@@ -15,57 +15,70 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { useStore } from "@/hooks/usePageData"
-import { useCurrentStudent } from "@/hooks/useCurrentUser"
-import { addSubmission, nextSubmissionId } from "@/lib/store"
+import { usePageData } from "@/hooks/usePageData"
+import { useAuth } from "@/contexts/AuthContext"
+import { submissionApi } from "@/lib/api"
 import { toast } from "sonner"
+import { Loader } from "@/components/ui/Loader"
 
 export function StudentAssignments() {
-  const store   = useStore()
-  const student = useCurrentStudent(store)
+  const { user } = useAuth()
+  const { data, loading, refresh } = usePageData((d) => {
+    const student = d.students.find(s => s.id === user?.refId) || d.students[0]
+    if (!student) return null
 
-  const myCourseIds = store.courses
-    .filter((c) => c.promotionId === student.promotionId)
-    .map((c) => c.id)
+    const myCourseIds = d.courses
+      .filter((c) => c.promotionId === student.promotionId)
+      .map((c) => c.id)
 
-  const assignments = store.assignments
-    .filter((a) => myCourseIds.includes(a.courseId))
-    .map((a) => {
-      const course      = store.courses.find((c) => c.id === a.courseId)
-      const submission  = store.submissions.find(
-        (s) => s.assignmentId === a.id && s.studentId === student.id,
-      )
-      const isOverdue = !submission && new Date(a.dueDate) < new Date()
-      return { ...a, courseName: course?.name ?? "Cours", submission, isOverdue }
-    })
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    const assignments = d.assignments
+      .filter((a) => myCourseIds.includes(a.courseId))
+      .map((a) => {
+        const course      = d.courses.find((c) => c.id === a.courseId)
+        const submission  = d.submissions.find(
+          (s) => s.assignmentId === a.id && s.studentId === student.id,
+        )
+        const isOverdue = !submission && new Date(a.dueDate) < new Date()
+        return { ...a, courseName: course?.name ?? "Cours", submission, isOverdue }
+      })
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
 
-  const todo      = assignments.filter((a) => !a.submission && !a.isOverdue).length
-  const submitted = assignments.filter((a) => a.submission).length
-  const graded    = assignments.filter((a) => a.submission?.grade !== undefined).length
+    return { student, assignments }
+  })
 
-  const [submitTarget, setSubmitTarget] = useState<(typeof assignments)[0] | null>(null)
+  const [submitTarget, setSubmitTarget] = useState<any | null>(null)
   const [content, setContent]           = useState("")
   const [isUploading, setIsUploading]   = useState(false)
 
-  function handleSubmit() {
+  if (loading || !data) return <Loader fullHeight />
+
+  const { student, assignments } = data
+
+  const todo      = assignments.filter((a: any) => !a.submission && !a.isOverdue).length
+  const submitted = assignments.filter((a: any) => a.submission).length
+  const graded    = assignments.filter((a: any) => a.submission?.grade !== undefined).length
+
+  async function handleSubmit() {
     if (!submitTarget || !content.trim()) return
     setIsUploading(true)
 
-    // Simulate upload
-    setTimeout(() => {
-      addSubmission({
-        id:           nextSubmissionId(),
+    try {
+      await submissionApi.create({
         assignmentId: submitTarget.id,
         studentId:    student.id,
         content:      content.trim(),
-        submittedAt:  new Date().toISOString(),
       })
-      setIsUploading(false)
+
+      toast.success("Travail remis avec succès")
+      await refresh()
       setSubmitTarget(null)
       setContent("")
-      toast.success("Travail remis avec succès")
-    }, 1200)
+    } catch (err) {
+      toast.error("Erreur lors de la remise du travail")
+      console.error(err)
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   function closeDialog() {
@@ -94,7 +107,7 @@ export function StudentAssignments() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {assignments.map((a) => {
+          {assignments.map((a: any) => {
             const statusLabel =
               a.submission?.grade !== undefined ? "Corrigé"
               : a.submission      ? "Remis"

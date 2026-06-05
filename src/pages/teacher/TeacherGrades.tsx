@@ -18,7 +18,7 @@ import {
 import { usePageData } from "@/hooks/usePageData"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
-import { upsertGrade } from "@/lib/store"
+import { gradeApi } from "@/lib/api"
 import type { Grade, Student } from "@/types"
 
 interface GradeStudent extends Student {
@@ -32,7 +32,7 @@ export function TeacherGrades() {
   const [assessmentType, setAssessmentType] = useState<Grade["type"]>("Interro")
   const [session, setSession] = useState<string>("Session Normale")
 
-  const { data, loading } = usePageData((d) => {
+  const { data, loading, refresh } = usePageData((d) => {
     const teacherId = user?.refId
     const teacher = d.teachers.find((t) => t.id === teacherId) || d.teachers[0]
     if (!teacher) return { teacher: null, courses: [], students: [], grades: [] }
@@ -41,7 +41,6 @@ export function TeacherGrades() {
     return { teacher, courses, students: d.students, grades: d.grades }
   })
 
-  // 1. Initialise le premier cours par défaut
   useEffect(() => {
     if (data?.courses.length && !selectedCourseId) {
       setSelectedCourseId(data.courses[0].id)
@@ -50,13 +49,11 @@ export function TeacherGrades() {
 
   const currentCourse = data?.courses.find(c => c.id === selectedCourseId)
 
-  // 2. Filtre les étudiants de la promotion du cours sélectionné
   const studentsInPromotion = useMemo(() => {
     if (!currentCourse || !data?.students) return []
     return data.students.filter(s => s.promotionId === currentCourse.promotionId)
   }, [currentCourse, data?.students])
 
-  // 3. Associe les notes existantes aux étudiants pour le contexte actuel (Course + Title + Type)
   const gradedContext = useMemo(() => {
     if (!selectedCourseId || !assessmentTitle || !data?.grades) return []
 
@@ -65,7 +62,7 @@ export function TeacherGrades() {
         g.studentId === student.id &&
         g.courseId === selectedCourseId &&
         g.type === assessmentType &&
-        g.assessmentTitle === assessmentTitle
+        g.assessment_title === assessmentTitle
       )
       return { ...student, grade }
     })
@@ -74,7 +71,7 @@ export function TeacherGrades() {
   const alreadyGraded = gradedContext.filter(s => !!s.grade)
   const toBeGraded = gradedContext.filter(s => !s.grade)
 
-  const handleScoreChange = (studentId: string, scoreStr: string) => {
+  const handleScoreChange = async (studentId: string, scoreStr: string) => {
     if (!selectedCourseId || !assessmentTitle) {
       toast.error("Veuillez sélectionner un cours et donner un titre à l'évaluation")
       return
@@ -84,7 +81,7 @@ export function TeacherGrades() {
     if (isNaN(score) || score < 0 || score > 20) return
 
     try {
-      upsertGrade({
+      await gradeApi.upsert({
         studentId,
         courseId: selectedCourseId,
         promotionId: currentCourse!.promotionId,
@@ -94,6 +91,7 @@ export function TeacherGrades() {
         assessmentTitle
       })
       toast.success("Note enregistrée")
+      await refresh()
     } catch (e) {
       toast.error("Erreur lors de l'enregistrement")
     }
@@ -172,7 +170,6 @@ export function TeacherGrades() {
         subtitle="Saisissez les notes par évaluation. Les étudiants passent automatiquement en section 'Déjà cotés'."
       />
 
-      {/* Configuration de l'évaluation */}
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -239,7 +236,6 @@ export function TeacherGrades() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Section: À coter */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -258,7 +254,6 @@ export function TeacherGrades() {
             />
           </div>
 
-          {/* Section: Déjà cotés */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

@@ -1,6 +1,6 @@
 // src/pages/secretariat_faculte/FacultyCourses.tsx
 import { useState } from "react"
-import { BookOpen, Clock, UserCheck, DoorOpen, Trash2 } from "lucide-react"
+import { BookOpen, Clock, UserCheck, DoorOpen, Trash2, Loader2 } from "lucide-react"
 import { PageHeader } from "@/components/ui/PageHeader"
 import { KPICard } from "@/components/ui/KPICard"
 import { DataTable, type Column } from "@/components/ui/DataTable"
@@ -21,13 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useStore } from "@/hooks/usePageData"
+import { usePageData } from "@/hooks/usePageData"
 import { useAuth } from "@/contexts/AuthContext"
-import { updateCourseAssignment, addScheduleSlot, removeScheduleSlot } from "@/lib/store"
+import { courseApi, scheduleApi } from "@/lib/api"
 import { enrichCourse } from "@/lib/selectors"
-import type { Course, ScheduleSlot } from "@/types"
+import type { Course, ScheduleSlot, AppData } from "@/types"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
+import { Loader } from "@/components/ui/Loader"
 
 interface CourseRow extends Course {
   promotionName: string
@@ -38,9 +39,19 @@ interface CourseRow extends Course {
 }
 
 export function FacultyCourses() {
-  const store = useStore()
   const { user } = useAuth()
   const facultyId = user?.facultyId || "f1"
+
+  const { data, loading, refresh } = usePageData((d: AppData) => {
+    const rows: CourseRow[] = d.courses.map(c => enrichCourse(d, c))
+    return {
+      rows,
+      faculties: d.faculties,
+      promotions: d.promotions,
+      teachers: d.teachers,
+      rooms: d.rooms
+    }
+  })
 
   const [promotionFilter, setPromotionFilter] = useState("all")
   const [assignTeacherTarget, setAssignTeacherTarget] = useState<CourseRow | null>(null)
@@ -51,10 +62,11 @@ export function FacultyCourses() {
   const [timeSlot, setTimeSlot] = useState<"matin" | "apres_midi" | "journee">("matin")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const rows: CourseRow[] = store.courses.map(c => enrichCourse(store, c))
+  if (loading || !data) return <Loader fullHeight />
 
-  const filtered = rows.filter((r) => {
+  const filtered = data.rows.filter((r) => {
     const isSameFaculty = r.facultyId === facultyId
     const isSamePromotion = promotionFilter === "all" || r.promotionId === promotionFilter
     return isSameFaculty && isSamePromotion
@@ -64,18 +76,27 @@ export function FacultyCourses() {
   const totalCredits = filtered.reduce((acc, r) => acc + r.credits, 0)
 
   const teachersForDialog = assignTeacherTarget
-    ? store.teachers.filter((t) => t.facultyId === assignTeacherTarget.facultyId)
+    ? data.teachers.filter((t) => t.facultyId === assignTeacherTarget.facultyId)
     : []
 
-  function handleAssignTeacher() {
+  async function handleAssignTeacher() {
     if (!assignTeacherTarget || !selectedTeacherId) return
-    updateCourseAssignment(assignTeacherTarget.id, selectedTeacherId, assignTeacherTarget.roomId)
-    setAssignTeacherTarget(null)
-    setSelectedTeacherId("")
-    toast.success("Enseignant mis à jour")
+    setIsSubmitting(true)
+    try {
+      await courseApi.assignTeacher(assignTeacherTarget.id, selectedTeacherId)
+      toast.success("Enseignant mis à jour")
+      await refresh()
+      setAssignTeacherTarget(null)
+      setSelectedTeacherId("")
+    } catch (err) {
+      toast.error("Erreur lors de l'attribution")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  function handleAddSlot() {
+  async function handleAddSlot() {
     if (!manageSlotsTarget || !selectedRoomId || !startDate || !endDate) {
       toast.error("Veuillez remplir tous les champs")
       return
@@ -84,29 +105,39 @@ export function FacultyCourses() {
     const start = timeSlot === "apres_midi" ? "13:00" : "08:00"
     const end = timeSlot === "matin" ? "12:00" : "17:00"
 
+    setIsSubmitting(true)
     try {
-      addScheduleSlot({
+      await scheduleApi.create({
         courseId: manageSlotsTarget.id,
         promotionId: manageSlotsTarget.promotionId,
         teacherId: manageSlotsTarget.teacherId,
         day: selectedDay,
-        start,
-        end,
+        start_time: start,
+        end_time: end,
         room: selectedRoomId,
         startDate,
         endDate
       })
 
       toast.success("Horaire ajouté avec succès")
+      await refresh()
       resetForm()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Une erreur est survenue")
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  function handleRemoveSlot(slotId: string) {
-    removeScheduleSlot(slotId)
-    toast.success("Horaire supprimé")
+  async function handleRemoveSlot(slotId: string) {
+    try {
+      await scheduleApi.delete(slotId)
+      toast.success("Horaire supprimé")
+      await refresh()
+    } catch (err) {
+      toast.error("Erreur lors de la suppression")
+      console.error(err)
+    }
   }
 
   function resetForm() {
@@ -150,7 +181,7 @@ export function FacultyCourses() {
             className="h-7 shrink-0 gap-1 text-xs"
             onClick={() => {
               setAssignTeacherTarget(c)
-              setSelectedTeacherId(c.teacherId)
+              setSelectedTeacherId(c.teacherId || "")
             }}
           >
             <UserCheck className="size-3.5" />
@@ -169,7 +200,7 @@ export function FacultyCourses() {
               <div className="space-y-0.5">
                 {c.schedules.map((s, idx) => (
                   <p key={idx} className="text-[10px] leading-tight text-muted-foreground uppercase">
-                    {s.day} {s.start}-{s.end} · {store.rooms.find(r => r.id === s.room)?.name || s.room}
+                    {s.day} {s.start_time}-{s.end_time} · {data.rooms.find(r => r.id === s.room)?.name || s.room}
                   </p>
                 ))}
               </div>
@@ -214,7 +245,7 @@ export function FacultyCourses() {
     },
   ]
 
-  const promotions = store.promotions.filter(p => p.facultyId === facultyId)
+  const facultyPromotions = data.promotions.filter(p => p.facultyId === facultyId)
 
   return (
     <>
@@ -228,7 +259,7 @@ export function FacultyCourses() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Toutes les promotions</SelectItem>
-              {promotions.map((p) => (
+              {facultyPromotions.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
                   {p.name}
                 </SelectItem>
@@ -301,14 +332,15 @@ export function FacultyCourses() {
             <Button
               variant="outline"
               onClick={() => { setAssignTeacherTarget(null); setSelectedTeacherId("") }}
+              disabled={isSubmitting}
             >
               Annuler
             </Button>
             <Button
               onClick={handleAssignTeacher}
-              disabled={!selectedTeacherId || selectedTeacherId === assignTeacherTarget?.teacherId}
+              disabled={!selectedTeacherId || selectedTeacherId === assignTeacherTarget?.teacherId || isSubmitting}
             >
-              Attribuer
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "Attribuer"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -331,7 +363,6 @@ export function FacultyCourses() {
                 <p className="text-muted-foreground">{manageSlotsTarget.promotionName}</p>
               </div>
 
-              {/* Current Slots */}
               <div className="space-y-2">
                 <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Horaires actuels</p>
                 <div className="divide-y rounded-md border">
@@ -341,8 +372,8 @@ export function FacultyCourses() {
                     manageSlotsTarget.schedules.map((s) => (
                       <div key={s.id} className="flex items-center justify-between p-2 text-xs">
                         <div>
-                          <p className="font-medium uppercase">{s.day} {s.start}-{s.end}</p>
-                          <p className="text-muted-foreground">{store.rooms.find(r => r.id === s.room)?.name || s.room} · {s.startDate} au {s.endDate}</p>
+                          <p className="font-medium uppercase">{s.day} {s.start_time}-{s.end_time}</p>
+                          <p className="text-muted-foreground">{data.rooms.find(r => r.id === s.room)?.name || s.room} · {s.startDate} au {s.endDate}</p>
                         </div>
                         <Button
                           variant="ghost"
@@ -358,7 +389,6 @@ export function FacultyCourses() {
                 </div>
               </div>
 
-              {/* Add New Slot Form */}
               <div className="space-y-3 rounded-lg border bg-accent/30 p-3">
                 <p className="text-xs font-bold uppercase tracking-widest text-primary">Ajouter un créneau</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -369,7 +399,7 @@ export function FacultyCourses() {
                         <SelectValue placeholder="Salle…" />
                       </SelectTrigger>
                       <SelectContent>
-                        {store.rooms.map((r) => (
+                        {data.rooms.map((r) => (
                           <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -410,14 +440,14 @@ export function FacultyCourses() {
                     <Input type="date" className="h-8 text-xs" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
                   </div>
                 </div>
-                <Button size="sm" className="w-full h-8 text-xs font-bold uppercase tracking-widest" onClick={handleAddSlot}>
-                  Ajouter ce créneau
+                <Button size="sm" className="w-full h-8 text-xs font-bold uppercase tracking-widest" onClick={handleAddSlot} disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 className="size-3 animate-spin" /> : "Ajouter ce créneau"}
                 </Button>
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setManageSlotsTarget(null)}>
+            <Button variant="outline" onClick={() => setManageSlotsTarget(null)} disabled={isSubmitting}>
               Fermer
             </Button>
           </DialogFooter>

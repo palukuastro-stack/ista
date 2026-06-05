@@ -4,29 +4,39 @@ import { PageHeader } from "@/components/ui/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { useStore } from "@/hooks/usePageData"
-import { useCurrentStudent } from "@/hooks/useCurrentUser"
+import { usePageData } from "@/hooks/usePageData"
+import { useAuth } from "@/contexts/AuthContext"
 import { RESOURCE_ICONS, RESOURCE_LABELS, RESOURCE_COLORS } from "@/lib/constants"
 import { toast } from "sonner"
+import { Loader } from "@/components/ui/Loader"
+import type { AppData } from "@/types"
 
 export function StudentResources() {
-  const store   = useStore()
-  const student = useCurrentStudent(store)
+  const { user } = useAuth()
+  const { data, loading } = usePageData((d: AppData) => {
+    const student = d.students.find(s => s.id === user?.refId) || d.students[0]
+    if (!student) return null
 
-  const coursesWithResources = store.courses
-    .filter((c) => c.promotionId === student.promotionId)
-    .map((c) => {
-      const teacher   = store.teachers.find((t) => t.id === c.teacherId)
-      const resources = store.courseResources.filter((r) => r.courseId === c.id)
-      return {
-        ...c,
-        teacherName: teacher ? `${teacher.firstName} ${teacher.lastName}` : "—",
-        resources,
-      }
-    })
-    .filter((c) => c.resources.length > 0)
+    const coursesWithResources = d.courses
+      .filter((c) => c.promotionId === student.promotionId)
+      .map((c) => {
+        const teacher   = d.teachers.find((t) => t.id === c.teacherId)
+        const resources = d.courseResources.filter((r) => r.courseId === c.id)
+        return {
+          ...c,
+          teacherName: teacher ? `${teacher.firstName} ${teacher.lastName}` : "—",
+          resources,
+        }
+      })
+      .filter((c) => c.resources.length > 0)
 
-  const totalResources = coursesWithResources.reduce((acc, c) => acc + c.resources.length, 0)
+    return { coursesWithResources }
+  })
+
+  if (loading || !data) return <Loader fullHeight />
+
+  const { coursesWithResources } = data
+  const totalResources = coursesWithResources.reduce((acc: number, c: any) => acc + c.resources.length, 0)
 
   return (
     <>
@@ -57,7 +67,7 @@ export function StudentResources() {
           </p>
 
           <div className="space-y-6">
-            {coursesWithResources.map((c) => (
+            {coursesWithResources.map((c: any) => (
               <Card key={c.id}>
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
@@ -74,15 +84,15 @@ export function StudentResources() {
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="space-y-2">
-                    {c.resources.map((r) => {
-                      const RIcon = RESOURCE_ICONS[r.type]
+                    {c.resources.map((r: any) => {
+                      const RIcon = (RESOURCE_ICONS as any)[r.type]
                       return (
                         <div
                           key={r.id}
                           className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/30"
                         >
                           <div
-                            className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${RESOURCE_COLORS[r.type]}`}
+                            className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${(RESOURCE_COLORS as any)[r.type]}`}
                           >
                             <RIcon className="size-4" />
                           </div>
@@ -91,7 +101,7 @@ export function StudentResources() {
                               {r.title}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {RESOURCE_LABELS[r.type]} · Ajouté le {r.createdAt}
+                              {(RESOURCE_LABELS as any)[r.type]} · Ajouté le {r.createdAt}
                             </p>
                           </div>
                           <div className="flex shrink-0 gap-2">

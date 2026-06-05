@@ -20,9 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useStore } from "@/hooks/usePageData"
-import { addStudent, generateId } from "@/lib/store"
-import type { Student } from "@/types"
+import { usePageData } from "@/hooks/usePageData"
+import { studentApi } from "@/lib/api"
+import type { AppData } from "@/types"
 import { toast } from "sonner"
 
 interface FormState {
@@ -49,15 +49,22 @@ const EMPTY: FormState = {
   promotionId: "",
 }
 
+const selector = (d: AppData) => ({
+  faculties: d.faculties,
+  promotions: d.promotions,
+  studentCount: d.students.length
+})
+
 export function InscriptionDialog() {
-  const store = useStore()
+  const { data, refresh } = usePageData(selector)
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const promotions = useMemo(
-    () => store.promotions.filter((p) => !form.facultyId || p.facultyId === form.facultyId),
-    [store.promotions, form.facultyId],
+  const filteredPromotions = useMemo(
+    () => data?.promotions.filter((p) => !form.facultyId || p.facultyId === form.facultyId) ?? [],
+    [data?.promotions, form.facultyId],
   )
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -79,37 +86,44 @@ export function InscriptionDialog() {
     return Object.keys(e).length === 0
   }
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!validate()) return
 
-    const year = new Date().getFullYear()
-    const seq = String(store.students.length + 1).padStart(3, "0")
-    const newStudent: Student = {
-      id: generateId("s"),
-      matricule: `ISTA-${year}-${seq}`,
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      middleName: form.middleName.trim(),
-      birthDate: form.birthDate,
-      email: form.email.trim(),
-      phone: form.phone.trim() || "—",
-      gender: form.gender as "M" | "F",
-      promotionId: form.promotionId,
-      facultyId: form.facultyId,
-      status: "pending",
-      enrollmentDate: new Date().toISOString().slice(0, 10),
-      average: 0,
+    setIsSubmitting(true)
+    try {
+      const year = new Date().getFullYear()
+      const seq = String((data?.studentCount ?? 0) + 1).padStart(3, "0")
+
+      await studentApi.create({
+        matricule: `ISTA-${year}-${seq}`,
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        middleName: form.middleName.trim(),
+        birthDate: form.birthDate,
+        email: form.email.trim(),
+        phone: form.phone.trim() || "—",
+        gender: form.gender as "M" | "F",
+        promotionId: form.promotionId,
+        facultyId: form.facultyId,
+        status: "pending",
+        enrollmentDate: new Date().toISOString().slice(0, 10),
+      })
+
+      toast.success(`Inscription réussie ! Un email avec les accès a été envoyé à ${form.email}`)
+      await refresh()
+      setForm(EMPTY)
+      setErrors({})
+      setOpen(false)
+    } catch (err) {
+      toast.error("Erreur lors de l'inscription.")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
     }
-    addStudent(newStudent)
-
-    // Simulate sending email
-    toast.success(`Inscription réussie ! Un email avec les accès a été envoyé à ${form.email}`)
-
-    setForm(EMPTY)
-    setErrors({})
-    setOpen(false)
   }
+
+  if (!data) return null
 
   return (
     <Dialog
@@ -243,7 +257,7 @@ export function InscriptionDialog() {
                   <SelectValue placeholder="Sélectionner" />
                 </SelectTrigger>
                 <SelectContent>
-                  {store.faculties.map((f) => (
+                  {data.faculties.map((f) => (
                     <SelectItem key={f.id} value={f.id}>
                       {f.name}
                     </SelectItem>
@@ -267,7 +281,7 @@ export function InscriptionDialog() {
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {promotions.map((p) => (
+                  {filteredPromotions.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}
                     </SelectItem>
@@ -281,10 +295,12 @@ export function InscriptionDialog() {
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
               Annuler
             </Button>
-            <Button type="submit">Enregistrer l'inscription</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Enregistrement..." : "Enregistrer l'inscription"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

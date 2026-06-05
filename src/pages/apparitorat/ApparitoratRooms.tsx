@@ -10,15 +10,15 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { usePageData, useStore } from "@/hooks/usePageData"
-import { addRoom, removeRoom, nextRoomId } from "@/lib/store"
+import { usePageData } from "@/hooks/usePageData"
+import { roomApi } from "@/lib/api"
 import { DataTable, type Column } from "@/components/ui/DataTable"
 import { toast } from "sonner"
 import type { Room } from "@/types"
+import { Loader } from "@/components/ui/Loader"
 
 export function ApparitoratRooms() {
-  const store = useStore()
-  const { data, loading } = usePageData(d => d)
+  const { data, loading, refresh } = usePageData(d => ({ rooms: d.rooms }))
   const [createOpen, setCreateOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [form, setForm] = useState({
@@ -28,24 +28,40 @@ export function ApparitoratRooms() {
     category: "Salle de cours" as any
   })
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
-    const newRoom: Room = {
-      id: nextRoomId(),
-      name: form.name,
-      capacity: Number(form.capacity),
-      description: form.description,
-      category: form.category
-    }
-    setTimeout(() => {
-      addRoom(newRoom)
-      setIsSubmitting(false)
+    try {
+      await roomApi.create({
+        name: form.name,
+        capacity: Number(form.capacity),
+        description: form.description,
+        category: form.category
+      })
+      toast.success("Salle ajoutée avec succès")
+      await refresh()
       setCreateOpen(false)
       setForm({ name: "", capacity: "", description: "", category: "Salle de cours" })
-      toast.success("Salle ajoutée avec succès")
-    }, 800)
+    } catch (err) {
+      toast.error("Erreur lors de la création du local")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
+
+  const handleDelete = async (id: string) => {
+    try {
+      await roomApi.delete(id)
+      toast.success("Salle supprimée")
+      await refresh()
+    } catch (err) {
+      toast.error("Erreur lors de la suppression")
+      console.error(err)
+    }
+  }
+
+  if (loading || !data) return <Loader fullHeight />
 
   const columns: Column<Room>[] = [
     { key: "name", header: "Nom de la salle", render: r => <span className="font-medium">{r.name}</span> },
@@ -57,7 +73,7 @@ export function ApparitoratRooms() {
       header: "",
       align: "right",
       render: r => (
-        <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => removeRoom(r.id)}>
+        <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(r.id)}>
           <Trash2 className="size-4" />
         </Button>
       )
@@ -85,7 +101,7 @@ export function ApparitoratRooms() {
           <CardContent>
             <DataTable
               columns={columns}
-              data={store.rooms}
+              data={data.rooms}
               rowKey={r => r.id}
               emptyTitle="Aucune salle"
               emptyDescription="Commencez par ajouter une salle de cours ou un laboratoire."
@@ -102,7 +118,7 @@ export function ApparitoratRooms() {
             <CardDescription>Occupation en temps réel des locaux.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {store.rooms.slice(0, 5).map((r, i) => (
+            {data.rooms.slice(0, 5).map((r, i) => (
               <div key={r.id} className="flex items-center justify-between border-b border-border pb-3 last:border-0 last:pb-0">
                 <div className="min-w-0">
                   <p className="font-medium text-sm">{r.name}</p>
@@ -154,7 +170,7 @@ export function ApparitoratRooms() {
               <Textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Ex: Équipée de projecteur..." />
             </div>
             <DialogFooter>
-              <Button variant="outline" type="button" onClick={() => setCreateOpen(false)}>Annuler</Button>
+              <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={isSubmitting}>Annuler</Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
                 Enregistrer

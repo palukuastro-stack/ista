@@ -1,6 +1,6 @@
 // src/pages/teacher/TeacherAssignments.tsx
 import { useState } from "react"
-import { Plus, ClipboardCheck, Trash2, Star, Users } from "lucide-react"
+import { Plus, ClipboardCheck, Trash2, Star, Users, Loader2 } from "lucide-react"
 import { PageHeader } from "@/components/ui/PageHeader"
 import { KPICard } from "@/components/ui/KPICard"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -24,29 +24,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useStore } from "@/hooks/usePageData"
-import { useCurrentTeacher } from "@/hooks/useCurrentUser"
-import {
-  addAssignment,
-  removeAssignment,
-  gradeSubmission,
-  nextAssignmentId,
-} from "@/lib/store"
+import { usePageData } from "@/hooks/usePageData"
+import { useAuth } from "@/contexts/AuthContext"
+import { assignmentApi, submissionApi } from "@/lib/api"
+import { toast } from "sonner"
+import { Loader } from "@/components/ui/Loader"
 
 export function TeacherAssignments() {
-  const store   = useStore()
-  const teacher = useCurrentTeacher(store)
+  const { user } = useAuth()
+  const { data, loading, refresh } = usePageData((d) => {
+    const teacherId = user?.refId
+    const teacher = d.teachers.find(t => t.id === teacherId) || d.teachers[0]
+    if (!teacher) return null
 
-  const myCourses     = store.courses.filter((c) => c.teacherId === teacher.id)
-  const myAssignments = store.assignments.filter((a) => a.teacherId === teacher.id)
-  const mySubmissions = store.submissions.filter((s) =>
-    myAssignments.some((a) => a.id === s.assignmentId),
-  )
+    const myCourses     = d.courses.filter((c) => c.teacherId === teacher.id)
+    const myAssignments = d.assignments.filter((a) => a.teacherId === teacher.id)
+    const mySubmissions = d.submissions.filter((s) =>
+      myAssignments.some((a) => a.id === s.assignmentId),
+    )
+
+    return { teacher, myCourses, myAssignments, mySubmissions, allStudents: d.students, allCourses: d.courses }
+  })
 
   const [createOpen, setCreateOpen] = useState(false)
   const [gradeOpen, setGradeOpen]   = useState<string | null>(null)
   const [gradeValue, setGradeValue] = useState("")
   const [feedback, setFeedback]     = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [form, setForm] = useState({
     courseId: "",
     title: "",
@@ -57,31 +61,64 @@ export function TeacherAssignments() {
     durationMinutes: 0,
   })
 
-  function handleCreate() {
+  if (loading || !data) return <Loader fullHeight />
+
+  const { teacher, myCourses, myAssignments, mySubmissions, allStudents, allCourses } = data
+
+  async function handleCreate() {
     if (!form.courseId || !form.title.trim() || !form.dueDate) return
-    addAssignment({
-      id:          nextAssignmentId(),
-      courseId:    form.courseId,
-      teacherId:   teacher.id,
-      title:       form.title.trim(),
-      description: form.description.trim(),
-      dueDate:     form.dueDate,
-      createdAt:   new Date().toISOString().slice(0, 10),
-      type:        form.type,
-      deadlineTime: form.deadlineTime,
-      durationMinutes: form.durationMinutes > 0 ? form.durationMinutes : undefined,
-    })
-    setForm({ courseId: "", title: "", description: "", dueDate: "", type: "PDF", deadlineTime: "23:59", durationMinutes: 0 })
-    setCreateOpen(false)
+    setIsSubmitting(true)
+    try {
+      await assignmentApi.create({
+        courseId:    form.courseId,
+        teacherId:   teacher.id,
+        title:       form.title.trim(),
+        description: form.description.trim(),
+        dueDate:     form.dueDate,
+        type:        form.type,
+        deadlineTime: form.deadlineTime,
+        durationMinutes: form.durationMinutes > 0 ? form.durationMinutes : undefined,
+      })
+      toast.success("Travail créé avec succès")
+      await refresh()
+      setForm({ courseId: "", title: "", description: "", dueDate: "", type: "PDF", deadlineTime: "23:59", durationMinutes: 0 })
+      setCreateOpen(false)
+    } catch (err) {
+      toast.error("Erreur lors de la création")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  function handleGrade(subId: string) {
+  async function handleDelete(id: string) {
+    try {
+      await assignmentApi.delete(id)
+      toast.success("Travail supprimé")
+      await refresh()
+    } catch (err) {
+      toast.error("Erreur lors de la suppression")
+      console.error(err)
+    }
+  }
+
+  async function handleGrade(subId: string) {
     const score = Number(gradeValue)
     if (isNaN(score) || score < 0 || score > 20) return
-    gradeSubmission(subId, score, feedback.trim())
-    setGradeOpen(null)
-    setGradeValue("")
-    setFeedback("")
+    setIsSubmitting(true)
+    try {
+      await submissionApi.grade(subId, score, feedback.trim())
+      toast.success("Note enregistrée")
+      await refresh()
+      setGradeOpen(null)
+      setGradeValue("")
+      setFeedback("")
+    } catch (err) {
+      toast.error("Erreur lors de la correction")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   function closeGradeDialog() {
@@ -118,7 +155,7 @@ export function TeacherAssignments() {
         />
         <KPICard
           title="Corrigées"
-          value={mySubmissions.filter((s) => s.grade !== undefined).length}
+          value={mySubmissions.filter((s: any) => s.grade !== undefined).length}
           icon={Star}
           colorClass="bg-chart-3/15 text-chart-3"
         />
@@ -138,9 +175,9 @@ export function TeacherAssignments() {
               </CardContent>
             </Card>
           ) : (
-            myAssignments.map((a) => {
-              const course    = store.courses.find((c) => c.id === a.courseId)
-              const subCount  = store.submissions.filter((s) => s.assignmentId === a.id).length
+            myAssignments.map((a: any) => {
+              const course    = allCourses.find((c: any) => c.id === a.courseId)
+              const subCount  = mySubmissions.filter((s: any) => s.assignmentId === a.id).length
               return (
                 <Card key={a.id}>
                   <CardHeader className="pb-2">
@@ -159,7 +196,7 @@ export function TeacherAssignments() {
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => removeAssignment(a.id)}
+                          onClick={() => handleDelete(a.id)}
                         >
                           <Trash2 className="size-4" />
                         </Button>
@@ -185,9 +222,9 @@ export function TeacherAssignments() {
               </CardContent>
             </Card>
           ) : (
-            mySubmissions.map((s) => {
-              const assignment = store.assignments.find((a) => a.id === s.assignmentId)
-              const student    = store.students.find((st) => st.id === s.studentId)
+            mySubmissions.map((s: any) => {
+              const assignment = myAssignments.find((a: any) => a.id === s.assignmentId)
+              const student    = allStudents.find((st: any) => st.id === s.studentId)
               return (
                 <Card key={s.id}>
                   <CardHeader className="pb-2">
@@ -247,7 +284,6 @@ export function TeacherAssignments() {
         </TabsContent>
       </Tabs>
 
-      {/* ─── Create assignment dialog ─────────────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -264,7 +300,7 @@ export function TeacherAssignments() {
                   <SelectValue placeholder="Sélectionner un cours…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {myCourses.map((c) => (
+                  {myCourses.map((c: any) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
                     </SelectItem>
@@ -339,20 +375,19 @@ export function TeacherAssignments() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={isSubmitting}>
               Annuler
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={!form.courseId || !form.title.trim() || !form.dueDate}
+              disabled={!form.courseId || !form.title.trim() || !form.dueDate || isSubmitting}
             >
-              Créer
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "Créer"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ─── Grade submission dialog ──────────────────────────────────────── */}
       <Dialog open={gradeOpen !== null} onOpenChange={(open) => !open && closeGradeDialog()}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -384,9 +419,9 @@ export function TeacherAssignments() {
           <DialogFooter>
             <Button
               onClick={() => gradeOpen && handleGrade(gradeOpen)}
-              disabled={!gradeValue || Number(gradeValue) < 0 || Number(gradeValue) > 20}
+              disabled={!gradeValue || Number(gradeValue) < 0 || Number(gradeValue) > 20 || isSubmitting}
             >
-              Enregistrer
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "Enregistrer"}
             </Button>
           </DialogFooter>
         </DialogContent>

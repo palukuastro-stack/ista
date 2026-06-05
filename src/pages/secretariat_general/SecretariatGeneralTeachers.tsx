@@ -1,6 +1,6 @@
 // src/pages/secretariat_general/SecretariatGeneralTeachers.tsx
 import { useState } from "react"
-import { UserSquare2, Plus, UserCheck, UserX } from "lucide-react"
+import { UserSquare2, Plus, UserCheck, UserX, Loader2 } from "lucide-react"
 import { PageHeader } from "@/components/ui/PageHeader"
 import { KPICard } from "@/components/ui/KPICard"
 import { DataTable, type Column } from "@/components/ui/DataTable"
@@ -22,10 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useStore } from "@/hooks/usePageData"
-import { addTeacher, generateId, nextTeacherMatricule } from "@/lib/store"
-import type { Teacher } from "@/types"
+import { usePageData } from "@/hooks/usePageData"
+import { teacherApi } from "@/lib/api"
+import type { Teacher, AppData } from "@/types"
 import { toast } from "sonner"
+import { Loader } from "@/components/ui/Loader"
 
 interface TeacherRow extends Teacher {
   facultyName: string
@@ -33,10 +34,17 @@ interface TeacherRow extends Teacher {
 }
 
 export function SecretariatGeneralTeachers() {
-  const store  = useStore()
-  const titles = store.teacherTitles
+  const { data, loading, refresh } = usePageData((d: AppData) => {
+    const rows: TeacherRow[] = d.teachers.map((t) => ({
+      ...t,
+      facultyName: d.faculties.find((f) => f.id === t.facultyId)?.name ?? "—",
+      courseCount: d.courses.filter((c) => c.teacherId === t.id).length,
+    }))
+    return { rows, faculties: d.faculties, teacherTitles: d.teacherTitles }
+  })
 
   const [open, setOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [form, setForm] = useState({
     firstName: "",
     lastName:  "",
@@ -45,40 +53,47 @@ export function SecretariatGeneralTeachers() {
     email:     "",
     phone:     "",
     facultyId: "",
-    title:     titles[0] ?? "Professeur",
+    title:     "Professeur",
   })
 
-  const rows: TeacherRow[] = store.teachers.map((t) => ({
-    ...t,
-    facultyName: store.faculties.find((f) => f.id === t.facultyId)?.name ?? "—",
-    courseCount: store.courses.filter((c) => c.teacherId === t.id).length,
-  }))
+  if (loading || !data) return <Loader fullHeight />
+
+  const { rows, faculties } = data
+  const titles = data.teacherTitles.length > 0 ? data.teacherTitles : ["Professeur", "Chef de Travaux", "Assistant"]
 
   const active  = rows.filter((r) => r.status === "active").length
   const pending = rows.filter((r) => r.status === "pending").length
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.facultyId) return
-    addTeacher({
-      id:        generateId("t"),
-      matricule: nextTeacherMatricule(),
-      firstName: form.firstName.trim(),
-      lastName:  form.lastName.trim(),
-      middleName: form.middleName.trim(),
-      description: form.description.trim(),
-      email:     form.email.trim(),
-      phone:     form.phone.trim(),
-      facultyId: form.facultyId,
-      title:     form.title,
-      courseIds: [],
-      status:    "active",
-    })
+    setIsSubmitting(true)
+    try {
+      const year = new Date().getFullYear()
+      const seq = String(rows.length + 1).padStart(3, "0")
 
-    // Simulate sending email
-    toast.success(`Enseignant ajouté. Un email d'invitation a été envoyé à ${form.email}`)
+      await teacherApi.create({
+        matricule: `ENS-${year}-${seq}`,
+        firstName: form.firstName.trim(),
+        lastName:  form.lastName.trim(),
+        middleName: form.middleName.trim(),
+        description: form.description.trim(),
+        email:     form.email.trim(),
+        phone:     form.phone.trim(),
+        facultyId: form.facultyId,
+        title:     form.title,
+        status:    "active",
+      })
 
-    setForm({ firstName: "", lastName: "", middleName: "", description: "", email: "", phone: "", facultyId: "", title: titles[0] ?? "Professeur" })
-    setOpen(false)
+      toast.success(`Enseignant ajouté. Un email d'invitation a été envoyé à ${form.email}`)
+      await refresh()
+      setForm({ firstName: "", lastName: "", middleName: "", description: "", email: "", phone: "", facultyId: "", title: titles[0] })
+      setOpen(false)
+    } catch (err) {
+      toast.error("Erreur lors de l'ajout de l'enseignant")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const columns: Column<TeacherRow>[] = [
@@ -210,7 +225,7 @@ export function SecretariatGeneralTeachers() {
                 >
                   <SelectTrigger><SelectValue placeholder="Choisir…" /></SelectTrigger>
                   <SelectContent>
-                    {store.faculties.map((f) => (
+                    {faculties.map((f: any) => (
                       <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -224,7 +239,7 @@ export function SecretariatGeneralTeachers() {
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {titles.map((t) => (
+                    {titles.map((t: string) => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
                   </SelectContent>
@@ -233,12 +248,12 @@ export function SecretariatGeneralTeachers() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>Annuler</Button>
             <Button
               onClick={handleAdd}
-              disabled={!form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.facultyId}
+              disabled={!form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.facultyId || isSubmitting}
             >
-              Ajouter
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "Ajouter"}
             </Button>
           </DialogFooter>
         </DialogContent>
