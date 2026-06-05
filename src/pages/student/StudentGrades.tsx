@@ -17,11 +17,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { useStore } from "@/hooks/usePageData"
-import { useCurrentStudent } from "@/hooks/useCurrentUser"
-import { addGradeAppeal, nextAppealId } from "@/lib/store"
+import { usePageData } from "@/hooks/usePageData"
+import { useAuth } from "@/contexts/AuthContext"
+import { appealApi } from "@/lib/api"
 import type { Grade } from "@/types"
 import { toast } from "sonner"
+import { Loader } from "@/components/ui/Loader"
 
 interface GradeRow extends Grade {
   courseName: string
@@ -32,56 +33,67 @@ interface GradeRow extends Grade {
 }
 
 export function StudentGrades() {
-  const store   = useStore()
-  const student = useCurrentStudent(store)
+  const { user } = useAuth()
+  const { data, loading, refresh } = usePageData((d) => {
+    const student = d.students.find(s => s.id === user?.refId) || d.students[0]
+    if (!student) return null
 
-  const grades: GradeRow[] = store.grades
-    .filter((g) => g.studentId === student.id)
-    .map((g) => {
-      const course  = store.courses.find((c) => c.id === g.courseId)
-      const appeal  = store.gradeAppeals.find(
-        (a) => a.gradeId === g.id && a.studentId === student.id,
-      )
-      return {
-        ...g,
-        courseName:   course?.name     ?? "Cours",
-        courseCode:   course?.code     ?? "—",
-        credits:      course?.credits  ?? 0,
-        appealStatus: appeal?.status   ?? null,
-        appealMessage: appeal?.statusMessage,
-      }
-    })
+    const grades: GradeRow[] = d.grades
+      .filter((g) => g.studentId === student.id)
+      .map((g) => {
+        const course  = d.courses.find((c) => c.id === g.courseId)
+        const appeal  = d.gradeAppeals.find(
+          (a) => a.gradeId === g.id && a.studentId === student.id,
+        )
+        return {
+          ...g,
+          courseName:   course?.name     ?? "Cours",
+          courseCode:   course?.code     ?? "—",
+          credits:      course?.credits  ?? 0,
+          appealStatus: (appeal?.status as any)   ?? null,
+          appealMessage: appeal?.status_message,
+        }
+      })
 
-  const validated = grades.filter((g) => g.status === "validated").length
-  const pending   = grades.filter((g) => g.status === "pending").length
+    return { student, grades }
+  })
 
   const [appealGrade, setAppealGrade] = useState<GradeRow | null>(null)
   const [reason, setReason] = useState("")
   const [estimatedGrade, setEstimatedGrade] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleAppeal() {
+  if (loading || !data) return <Loader fullHeight />
+
+  const { student, grades } = data
+  const validated = grades.filter((g: any) => g.status === "validated").length
+  const pending   = grades.filter((g: any) => g.status === "pending").length
+
+  async function handleAppeal() {
     if (!appealGrade || !reason.trim()) return
     setIsSubmitting(true)
 
-    // Simulate upload
-    setTimeout(() => {
-      addGradeAppeal({
-        id:        nextAppealId(),
+    try {
+      await appealApi.create({
         studentId: student.id,
         courseId:  appealGrade.courseId,
         gradeId:   appealGrade.id,
         reason:    reason.trim(),
         status:    "pending",
-        createdAt: new Date().toISOString(),
         estimatedGrade: Number(estimatedGrade) || 0,
-        proofUrl: "https://example.com/proof.jpg"
       })
-      setIsSubmitting(false)
+
+      toast.success("Recours soumis avec succès")
+      await refresh()
       setAppealGrade(null)
       setReason("")
       setEstimatedGrade("")
-    }, 1000)
+    } catch (err) {
+      toast.error("Erreur lors de la soumission du recours")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   function closeDialog() {

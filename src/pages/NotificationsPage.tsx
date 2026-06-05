@@ -1,3 +1,4 @@
+// src/pages/NotificationsPage.tsx
 import { useState } from "react"
 import { Bell, Megaphone, CheckCheck, Star, AlertCircle, BookMarked, Plus } from "lucide-react"
 import { PageHeader } from "@/components/ui/PageHeader"
@@ -10,10 +11,11 @@ import { AnnouncementDialog } from "@/components/AnnouncementDialog"
 import { Loader } from "@/components/ui/Loader"
 import { usePageData } from "@/hooks/usePageData"
 import { useAuth } from "@/contexts/AuthContext"
-import { markNotificationRead, markAllNotificationsRead } from "@/lib/store"
+import { notificationApi } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { Notification } from "@/types"
 import locales from "@/lib/locales.json"
+import { toast } from "sonner"
 
 const TYPE_CONFIG: Record<
   Notification["type"],
@@ -58,34 +60,22 @@ export function NotificationsPage() {
 
   const canCreate = ["rectorat", "secretariat_general", "apparitorat", "secretariat_faculte", "teacher"].includes(user?.role || "")
 
-  const { data, loading } = usePageData((d) => {
+  const { data, loading, refresh } = usePageData((d) => {
     const student = user?.role === "student" ? d.students.find(s => s.id === user.refId) : null
 
     const announcements = d.announcements
       .filter((a) => {
-        // Global scope: everyone who matches audience
         if (a.scope === "global") {
           return a.audience === "all" || a.audience === user?.role
         }
-
-        // Faculty scope: students of that faculty
         if (a.scope === "faculty") {
           if (user?.role === "student") {
             return student?.facultyId === a.targetId
           }
-          if (user?.role === "secretariat_faculte") {
-            // Secretaire of that faculty can see it too
-            // Assuming we would check the secretary's faculty here
-            return true
-          }
-          return false
+          return true
         }
-
-        // Course scope: students in that course
         if (a.scope === "course") {
           if (user?.role === "student") {
-            // Check if student has a grade in this course (as proxy for being in it)
-            // or just has access to it.
             return d.grades.some(g => g.studentId === student?.id && g.courseId === a.targetId)
           }
           if (user?.role === "teacher") {
@@ -94,7 +84,6 @@ export function NotificationsPage() {
           }
           return false
         }
-
         return false
       })
       .sort((a, b) => b.date.localeCompare(a.date))
@@ -105,6 +94,25 @@ export function NotificationsPage() {
 
     return { announcements, notifications }
   })
+
+  const handleMarkRead = async (id: string) => {
+    try {
+      await notificationApi.markRead(id)
+      await refresh()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationApi.markAllRead()
+      await refresh()
+      toast.success("Toutes les notifications ont été marquées comme lues")
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   if (loading || !data) return <Loader fullHeight />
 
@@ -177,7 +185,7 @@ export function NotificationsPage() {
                     variant="ghost"
                     size="sm"
                     className="h-8 gap-1.5 text-xs"
-                    onClick={() => user?.role && markAllNotificationsRead(user.role)}
+                    onClick={handleMarkAllRead}
                   >
                     <CheckCheck className="size-3.5" />
                     {locales.common.mark_all_read}
@@ -191,7 +199,7 @@ export function NotificationsPage() {
                   return (
                     <div
                       key={n.id}
-                      onClick={() => !n.read && markNotificationRead(n.id)}
+                      onClick={() => !n.read && handleMarkRead(n.id)}
                       className={cn(
                         "flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 transition-all active:scale-[0.98] sm:gap-4 sm:p-4",
                         !n.read ? "border-primary/30 bg-primary/5" : "bg-card hover:bg-accent/30",
@@ -228,7 +236,7 @@ export function NotificationsPage() {
         </TabsContent>
       </Tabs>
 
-      <AnnouncementDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <AnnouncementDialog open={dialogOpen} onOpenChange={setDialogOpen} onSuccess={refresh} />
     </div>
   )
 }

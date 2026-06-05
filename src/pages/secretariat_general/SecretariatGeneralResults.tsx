@@ -12,9 +12,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useStore } from "@/hooks/usePageData"
-import type { Student } from "@/types"
+import { usePageData } from "@/hooks/usePageData"
+import type { Student, AppData } from "@/types"
 import locales from "@/lib/locales.json"
+import { Loader } from "@/components/ui/Loader"
 
 interface StudentRow extends Student {
   promotionName: string
@@ -35,41 +36,53 @@ function ScoreBadge({ avg }: { avg: number }) {
 }
 
 export function SecretariatGeneralResults() {
-  const store = useStore()
   const [facultyFilter, setFacultyFilter] = useState("all")
   const [promotionFilter, setPromotionFilter] = useState("all")
 
-  const activeStudents = store.students.filter((s) => s.status === "active")
-  const withGrades = store.students.filter((s) => s.average > 0)
-  const overallAvg =
-    withGrades.length > 0
-      ? withGrades.reduce((acc, s) => acc + s.average, 0) / withGrades.length
-      : 0
-  const succeeding = withGrades.filter((s) => s.average >= 10).length
+  const { data, loading } = usePageData((d: AppData) => {
+    const rows: StudentRow[] = d.students.map((s) => {
+      const promotion = d.promotions.find((p) => p.id === s.promotionId)
+      const faculty = d.faculties.find((f) => f.id === s.facultyId)
+      const gradeCount = d.grades.filter(
+        (g) => g.studentId === s.id && g.status === "validated",
+      ).length
+      return {
+        ...s,
+        promotionName: promotion?.name ?? "—",
+        facultyName: faculty?.name ?? "—",
+        gradeCount,
+        avg: s.average,
+      }
+    })
 
-  const rows: StudentRow[] = store.students.map((s) => {
-    const promotion = store.promotions.find((p) => p.id === s.promotionId)
-    const faculty = store.faculties.find((f) => f.id === s.facultyId)
-    const gradeCount = store.grades.filter(
-      (g) => g.studentId === s.id && g.status === "validated",
-    ).length
     return {
-      ...s,
-      promotionName: promotion?.name ?? "—",
-      facultyName: faculty?.name ?? "—",
-      gradeCount,
-      avg: s.average,
+      students: d.students,
+      rows,
+      faculties: d.faculties,
+      promotions: d.promotions
     }
   })
 
+  if (loading || !data) return <Loader fullHeight />
+
+  const { students, rows, faculties, promotions } = data
+
+  const activeStudents = students.filter((s: any) => s.status === "active")
+  const withGrades = students.filter((s: any) => s.average > 0)
+  const overallAvg =
+    withGrades.length > 0
+      ? withGrades.reduce((acc: number, s: any) => acc + s.average, 0) / withGrades.length
+      : 0
+  const succeeding = withGrades.filter((s: any) => s.average >= 10).length
+
   const filteredPromotions =
     facultyFilter === "all"
-      ? store.promotions
-      : store.promotions.filter((p) => p.facultyId === facultyFilter)
+      ? promotions
+      : promotions.filter((p: any) => p.facultyId === facultyFilter)
 
   const filtered = rows
-    .filter((r) => facultyFilter === "all" || r.facultyId === facultyFilter)
-    .filter((r) => promotionFilter === "all" || r.promotionId === promotionFilter)
+    .filter((r: any) => facultyFilter === "all" || r.facultyId === facultyFilter)
+    .filter((r: any) => promotionFilter === "all" || r.promotionId === promotionFilter)
 
   const columns: Column<StudentRow>[] = [
     {
@@ -135,7 +148,7 @@ export function SecretariatGeneralResults() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{locales.apparitorat.all_faculties}</SelectItem>
-            {store.faculties.map((f) => (
+            {faculties.map((f: any) => (
               <SelectItem key={f.id} value={f.id}>
                 {f.name}
               </SelectItem>
@@ -148,7 +161,7 @@ export function SecretariatGeneralResults() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{locales.apparitorat.all_promotions}</SelectItem>
-            {filteredPromotions.map((p) => (
+            {filteredPromotions.map((p: any) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.name}
               </SelectItem>

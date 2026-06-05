@@ -22,11 +22,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useStore } from "@/hooks/usePageData"
-import { useCurrentTeacher } from "@/hooks/useCurrentUser"
-import { addCourseResource, removeCourseResource, nextResourceId } from "@/lib/store"
+import { usePageData } from "@/hooks/usePageData"
+import { useAuth } from "@/contexts/AuthContext"
+import { resourceApi } from "@/lib/api"
 import { RESOURCE_ICONS, RESOURCE_LABELS } from "@/lib/constants"
 import type { CourseResource } from "@/types"
+import { Loader } from "@/components/ui/Loader"
+import { toast } from "sonner"
 
 interface ResForm {
   title: string
@@ -35,33 +37,62 @@ interface ResForm {
 }
 
 export function TeacherCourses() {
-  const store   = useStore()
-  const teacher = useCurrentTeacher(store)
+  const { user } = useAuth()
+  const { data, loading, refresh } = usePageData((d) => {
+    const teacher = d.teachers.find(t => t.id === user?.refId) || d.teachers[0]
+    if (!teacher) return null
+
+    const courses = d.courses
+      .filter((c) => c.teacherId === teacher.id)
+      .map((c) => ({
+        ...c,
+        promotionName: d.promotions.find((p) => p.id === c.promotionId)?.name ?? "—",
+        studentCount:  d.students.filter((s) => s.promotionId === c.promotionId).length,
+        resources:     d.courseResources.filter((r) => r.courseId === c.id),
+      }))
+
+    return { teacher, courses }
+  })
 
   const [openCourse, setOpenCourse] = useState<string | null>(null)
   const [form, setForm] = useState<ResForm>({ title: "", type: "pdf", url: "" })
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const courses = store.courses
-    .filter((c) => c.teacherId === teacher.id)
-    .map((c) => ({
-      ...c,
-      promotionName: store.promotions.find((p) => p.id === c.promotionId)?.name ?? "—",
-      studentCount:  store.students.filter((s) => s.promotionId === c.promotionId).length,
-      resources:     store.courseResources.filter((r) => r.courseId === c.id),
-    }))
+  if (loading || !data) return <Loader fullHeight />
 
-  function handleAdd(courseId: string) {
+  const { teacher, courses } = data
+
+  async function handleAdd(courseId: string) {
     if (!form.title.trim() || !form.url.trim()) return
-    addCourseResource({
-      id:        nextResourceId(),
-      courseId,
-      teacherId: teacher.id,
-      title:     form.title.trim(),
-      type:      form.type,
-      url:       form.url.trim(),
-      createdAt: new Date().toISOString().slice(0, 10),
-    })
-    setForm({ title: "", type: "pdf", url: "" })
+    setIsSubmitting(true)
+    try {
+      await resourceApi.create({
+        courseId,
+        teacherId: teacher.id,
+        title:     form.title.trim(),
+        type:      form.type,
+        url:       form.url.trim(),
+      })
+      toast.success("Ressource ajoutée avec succès")
+      await refresh()
+      setForm({ title: "", type: "pdf", url: "" })
+    } catch (err) {
+      toast.error("Erreur lors de l'ajout de la ressource")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handleDelete(resourceId: string) {
+    try {
+      await resourceApi.delete(resourceId)
+      toast.success("Ressource supprimée")
+      await refresh()
+    } catch (err) {
+      toast.error("Erreur lors de la suppression")
+      console.error(err)
+    }
   }
 
   function resetDialog() {
@@ -81,7 +112,7 @@ export function TeacherCourses() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {courses.map((c) => (
+          {courses.map((c: any) => (
             <Card key={c.id} className="flex flex-col">
               <CardHeader>
                 <div className="flex items-center justify-between gap-2">
@@ -131,8 +162,8 @@ export function TeacherCourses() {
                           Aucune ressource ajoutée.
                         </p>
                       ) : (
-                        c.resources.map((r) => {
-                          const RIcon = RESOURCE_ICONS[r.type]
+                        c.resources.map((r: any) => {
+                          const RIcon = (RESOURCE_ICONS as any)[r.type]
                           return (
                             <div
                               key={r.id}
@@ -144,13 +175,13 @@ export function TeacherCourses() {
                                 <p className="truncate text-xs text-muted-foreground">{r.url}</p>
                               </div>
                               <Badge variant="outline" className="shrink-0 text-xs">
-                                {RESOURCE_LABELS[r.type]}
+                                {(RESOURCE_LABELS as any)[r.type]}
                               </Badge>
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className="size-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                onClick={() => removeCourseResource(r.id)}
+                                onClick={() => handleDelete(r.id)}
                               >
                                 <Trash2 className="size-3.5" />
                               </Button>
@@ -202,10 +233,10 @@ export function TeacherCourses() {
                     <DialogFooter>
                       <Button
                         onClick={() => handleAdd(c.id)}
-                        disabled={!form.title.trim() || !form.url.trim()}
+                        disabled={!form.title.trim() || !form.url.trim() || isSubmitting}
                         className="gap-1.5"
                       >
-                        <Plus className="size-4" />
+                        {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
                         Ajouter
                       </Button>
                     </DialogFooter>

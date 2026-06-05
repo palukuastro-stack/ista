@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { usePageData, useStore } from "@/hooks/usePageData"
+import { usePageData } from "@/hooks/usePageData"
 import { useAuth } from "@/contexts/AuthContext"
-import { resolveGradeAppeal } from "@/lib/store"
+import { appealApi } from "@/lib/api"
 import { toast } from "sonner"
-import type { GradeAppeal } from "@/types"
+import type { GradeAppeal, AppData } from "@/types"
+import { Loader } from "@/components/ui/Loader"
 
 interface RecoursRow extends GradeAppeal {
   studentName: string
@@ -21,13 +22,12 @@ interface RecoursRow extends GradeAppeal {
 }
 
 export function FacultyRecours() {
-  const store = useStore()
   const { user } = useAuth()
   const [selected, setSelected] = useState<RecoursRow | null>(null)
   const [response, setResponse] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const { data, loading } = usePageData((d) => {
+  const { data, loading, refresh } = usePageData((d: AppData) => {
     const facultyId = user?.facultyId || "f1"
     const facultyCourses = d.courses.filter(c => c.facultyId === facultyId)
     const courseIds = new Set(facultyCourses.map(c => c.id))
@@ -48,17 +48,24 @@ export function FacultyRecours() {
     return { recours }
   })
 
-  const handleResolve = (status: "approved" | "rejected") => {
+  async function handleResolve(status: "approved" | "rejected") {
     if (!selected || !response.trim()) return
     setIsSubmitting(true)
-    setTimeout(() => {
-      resolveGradeAppeal(selected.id, status, response)
-      setIsSubmitting(false)
+    try {
+      await appealApi.resolve(selected.id, status, response)
+      toast.success(status === "approved" ? "Recours validé" : "Recours rejeté")
+      await refresh()
       setSelected(null)
       setResponse("")
-      toast.success(status === "approved" ? "Recours validé" : "Recours rejeté")
-    }, 800)
+    } catch (err) {
+      toast.error("Erreur lors du traitement du recours")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
+
+  if (loading || !data) return <Loader fullHeight />
 
   const columns: Column<RecoursRow>[] = [
     {
@@ -107,7 +114,7 @@ export function FacultyRecours() {
 
       <DataTable
         columns={columns}
-        data={data?.recours || []}
+        data={data.recours}
         rowKey={r => r.id}
         loading={loading}
         emptyTitle="Aucun recours"
@@ -169,11 +176,11 @@ export function FacultyRecours() {
           )}
           <DialogFooter className="gap-2">
             <Button variant="destructive" className="flex-1" onClick={() => handleResolve("rejected")} disabled={isSubmitting || !response.trim()}>
-              <XCircle className="size-4" />
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <XCircle className="size-4" />}
               Rejeter
             </Button>
             <Button variant="default" className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => handleResolve("approved")} disabled={isSubmitting || !response.trim()}>
-              <CheckCircle2 className="size-4" />
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
               Valider
             </Button>
           </DialogFooter>

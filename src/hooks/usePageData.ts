@@ -1,54 +1,116 @@
 // src/hooks/usePageData.ts
-import { useEffect, useRef, useState, useSyncExternalStore } from "react"
-import { getState, subscribe } from "@/lib/store"
+import { useEffect, useState, useCallback, useRef } from "react"
+import { useAuth } from "@/contexts/AuthContext"
+import {
+  studentApi,
+  teacherApi,
+  facultyApi,
+  gradeApi,
+  announcementApi,
+  promotionApi,
+  courseApi,
+  scheduleApi,
+  roomApi,
+  assignmentApi,
+  submissionApi,
+  appealApi,
+  resourceApi,
+  notificationApi
+} from "@/lib/api"
 import type { AppData } from "@/types"
-
-/** Subscribe to the live in-memory data store (re-renders on mutation). */
-export function useStore(): AppData {
-  return useSyncExternalStore(subscribe, getState, getState)
-}
 
 interface PageDataResult<T> {
   data: T | null
   loading: boolean
   error: string | null
+  refresh: () => Promise<void>
 }
 
 /**
- * Simulates an asynchronous network request reading from the local JSON store.
- * A short artificial delay lets components display loading states.
+ * Hook to fetch data for a page from the backend.
+ * Replaces the in-memory store entirely.
  */
 export function usePageData<T>(
   selector: (data: AppData) => T,
-  delay = 600,
 ): PageDataResult<T> {
-  const store = useStore()
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
+
   const selectorRef = useRef(selector)
   selectorRef.current = selector
 
-  useEffect(() => {
-    let active = true
+  const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const timer = setTimeout(() => {
-      if (!active) return
-      try {
-        setData(selectorRef.current(store))
-        setLoading(false)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Erreur de chargement")
-        setLoading(false)
-      }
-    }, delay)
-    return () => {
-      active = false
-      clearTimeout(timer)
-    }
-    // Re-run when the underlying store changes
-  }, [store, delay])
+    try {
+      // In a real optimized app, we would only fetch what the page needs.
+      // For this migration, we fetch common entities to reconstruct the AppData structure
+      // that the existing selectors expect.
+      const [
+        students,
+        teachers,
+        faculties,
+        promotions,
+        courses,
+        grades,
+        announcements,
+        schedules,
+        rooms,
+        assignments,
+        submissions,
+        appeals,
+        resources,
+        notifications,
+        teacherTitles
+      ] = await Promise.all([
+        studentApi.list(),
+        teacherApi.list(),
+        facultyApi.list(),
+        promotionApi.list(),
+        courseApi.list(),
+        gradeApi.list(),
+        announcementApi.list(),
+        scheduleApi.list(),
+        roomApi.list(),
+        assignmentApi.list(),
+        submissionApi.list(),
+        appealApi.list(),
+        resourceApi.list(),
+        notificationApi.list(),
+        teacherApi.titles().catch(() => ["Professeur", "Chef de Travaux", "Assistant"])
+      ])
 
-  return { data, loading, error }
+      const appData: AppData = {
+        students,
+        teachers,
+        faculties,
+        promotions,
+        courses,
+        grades,
+        announcements,
+        schedules,
+        rooms,
+        assignments,
+        submissions,
+        gradeAppeals: appeals,
+        courseResources: resources,
+        notifications,
+        teacherTitles
+      }
+
+      setData(selectorRef.current(appData))
+      setLoading(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur de chargement")
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData, user?.id])
+
+  return { data, loading, error, refresh: fetchData }
 }

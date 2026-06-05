@@ -18,9 +18,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useStore } from "@/hooks/usePageData"
-import { updateStudent } from "@/lib/store"
-import type { Student } from "@/types"
+import { usePageData } from "@/hooks/usePageData"
+import { studentApi } from "@/lib/api"
+import type { Student, AppData } from "@/types"
 import { toast } from "sonner"
 import locales from "@/lib/locales.json"
 import { useAuth } from "@/contexts/AuthContext"
@@ -29,13 +29,20 @@ interface EditStudentDialogProps {
   student: Student | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSuccess?: () => void
 }
 
-export function EditStudentDialog({ student, open, onOpenChange }: EditStudentDialogProps) {
-  const store = useStore()
+const selector = (d: AppData) => ({
+  faculties: d.faculties,
+  promotions: d.promotions
+})
+
+export function EditStudentDialog({ student, open, onOpenChange, onSuccess }: EditStudentDialogProps) {
+  const { data } = usePageData(selector)
   const { role } = useAuth()
   const [form, setForm] = useState<Student | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     if (student) {
@@ -43,12 +50,12 @@ export function EditStudentDialog({ student, open, onOpenChange }: EditStudentDi
     }
   }, [student])
 
-  const promotions = useMemo(
-    () => store.promotions.filter((p) => !form?.facultyId || p.facultyId === form.facultyId),
-    [store.promotions, form?.facultyId],
+  const filteredPromotions = useMemo(
+    () => data?.promotions.filter((p) => !form?.facultyId || p.facultyId === form.facultyId) ?? [],
+    [data?.promotions, form?.facultyId],
   )
 
-  if (!form) return null
+  if (!form || !data) return null
 
   const set = <K extends keyof Student>(key: K, value: Student[K]) => {
     setForm((f) => f ? ({ ...f, [key]: value }) : null)
@@ -65,13 +72,22 @@ export function EditStudentDialog({ student, open, onOpenChange }: EditStudentDi
     return Object.keys(e).length === 0
   }
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!validate()) return
 
-    updateStudent(form)
-    toast.success(`${locales.apparitorat.student} mis à jour avec succès`)
-    onOpenChange(false)
+    setIsSubmitting(true)
+    try {
+      await studentApi.update(form.id, form)
+      toast.success(`${locales.apparitorat.student} mis à jour avec succès`)
+      onSuccess?.()
+      onOpenChange(false)
+    } catch (err) {
+      toast.error("Erreur lors de la mise à jour.")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -138,7 +154,7 @@ export function EditStudentDialog({ student, open, onOpenChange }: EditStudentDi
               <Select
                 value={form.status}
                 onValueChange={(v) => set("status", v as any)}
-                disabled={role !== "secretariat_general"}
+                disabled={role !== "secretariat_general" || isSubmitting}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -157,7 +173,7 @@ export function EditStudentDialog({ student, open, onOpenChange }: EditStudentDi
             </div>
             <div className="space-y-1.5">
               <Label>Genre</Label>
-              <Select value={form.gender} onValueChange={(v) => set("gender", v as "M" | "F")}>
+              <Select value={form.gender} onValueChange={(v) => set("gender", v as "M" | "F")} disabled={isSubmitting}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -178,12 +194,13 @@ export function EditStudentDialog({ student, open, onOpenChange }: EditStudentDi
                   set("facultyId", v)
                   set("promotionId", "")
                 }}
+                disabled={isSubmitting}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {store.faculties.map((f) => (
+                  {data.faculties.map((f) => (
                     <SelectItem key={f.id} value={f.id}>
                       {f.name}
                     </SelectItem>
@@ -196,13 +213,13 @@ export function EditStudentDialog({ student, open, onOpenChange }: EditStudentDi
               <Select
                 value={form.promotionId}
                 onValueChange={(v) => set("promotionId", v)}
-                disabled={!form.facultyId}
+                disabled={!form.facultyId || isSubmitting}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {promotions.map((p) => (
+                  {filteredPromotions.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}
                     </SelectItem>
@@ -213,10 +230,12 @@ export function EditStudentDialog({ student, open, onOpenChange }: EditStudentDi
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Annuler
             </Button>
-            <Button type="submit">{locales.apparitorat.save_button}</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Enregistrement..." : locales.apparitorat.save_button}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -1,6 +1,6 @@
 // src/pages/secretariat_general/SecretariatGeneralEntities.tsx
 import { useState } from "react"
-import { Building2, GraduationCap, Plus, Users, BookOpen, UserSquare2 } from "lucide-react"
+import { Building2, GraduationCap, Plus, Users, BookOpen, UserSquare2, Loader2 } from "lucide-react"
 import { PageHeader } from "@/components/ui/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -24,18 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { usePageData, useStore } from "@/hooks/usePageData"
-import { addFaculty, addPromotion, generateId } from "@/lib/store"
+import { usePageData } from "@/hooks/usePageData"
+import { facultyApi, promotionApi } from "@/lib/api"
 import { toast } from "sonner"
-import type { Promotion } from "@/types"
+import type { Promotion, AppData } from "@/types"
 
 interface PromotionRow extends Promotion {
   facultyName: string
 }
 
 export function SecretariatGeneralEntities() {
-  const store = useStore()
   const [activeTab, setActiveTab] = useState("faculties")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Faculty Form
   const [facOpen, setFacOpen] = useState(false)
@@ -47,11 +47,10 @@ export function SecretariatGeneralEntities() {
     name: "",
     level: "1",
     facultyId: "",
-    studentCount: 50
   })
 
-  const { data: faculties, loading: facLoading } = usePageData((d) => {
-    return d.faculties.map((f) => ({
+  const { data, loading, refresh } = usePageData((d: AppData) => {
+    const faculties = d.faculties.map((f) => ({
       ...f,
       studentCount: d.students.filter((s) => s.facultyId === f.id).length,
       activeStudents: d.students.filter((s) => s.facultyId === f.id && s.status === "active").length,
@@ -59,49 +58,66 @@ export function SecretariatGeneralEntities() {
       teacherCount: d.teachers.filter((t) => t.facultyId === f.id).length,
       promotionCount: d.promotions.filter((p) => p.facultyId === f.id).length,
     }))
+
+    const promotionRows: PromotionRow[] = d.promotions.map(p => ({
+      ...p,
+      facultyName: d.faculties.find(f => f.id === p.facultyId)?.name ?? "—"
+    }))
+
+    return { faculties, promotionRows, allFaculties: d.faculties }
   })
 
-  const promotionRows: PromotionRow[] = store.promotions.map(p => ({
-    ...p,
-    facultyName: store.faculties.find(f => f.id === p.facultyId)?.name ?? "—"
-  }))
+  if (loading || !data) return <Loader fullHeight />
 
-  const handleAddFaculty = () => {
+  const { faculties, promotionRows, allFaculties } = data
+
+  const handleAddFaculty = async () => {
     if (!facForm.name || !facForm.code) return
-    addFaculty({
-      id: generateId("f"),
-      name: facForm.name,
-      code: facForm.code,
-      dean: facForm.dean || "À désigner",
-      studentCount: 0
-    })
-    toast.success("Faculté ajoutée avec succès")
-    setFacForm({ name: "", code: "", dean: "" })
-    setFacOpen(false)
+    setIsSubmitting(true)
+    try {
+      await facultyApi.create({
+        name: facForm.name,
+        code: facForm.code,
+        dean: facForm.dean || "À désigner",
+      })
+      toast.success("Faculté ajoutée avec succès")
+      await refresh()
+      setFacForm({ name: "", code: "", dean: "" })
+      setFacOpen(false)
+    } catch (err) {
+      toast.error("Erreur lors de la création")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleAddPromotion = () => {
+  const handleAddPromotion = async () => {
     if (!promForm.name || !promForm.facultyId) return
-    addPromotion({
-      id: generateId("p"),
-      name: promForm.name,
-      level: promForm.level,
-      facultyId: promForm.facultyId,
-      studentCount: promForm.studentCount
-    })
-    toast.success("Promotion créée avec succès")
-    setPromForm({ name: "", level: "1", facultyId: "", studentCount: 50 })
-    setPromOpen(false)
+    setIsSubmitting(true)
+    try {
+      await promotionApi.create({
+        name: promForm.name,
+        level: promForm.level,
+        facultyId: promForm.facultyId,
+      })
+      toast.success("Promotion créée avec succès")
+      await refresh()
+      setPromForm({ name: "", level: "1", facultyId: "" })
+      setPromOpen(false)
+    } catch (err) {
+      toast.error("Erreur lors de la création")
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const promColumns: Column<PromotionRow>[] = [
     { key: "name", header: "Promotion", render: p => <span className="font-medium">{p.name}</span> },
     { key: "level", header: "Niveau", render: p => `Année ${p.level}` },
     { key: "faculty", header: "Faculté", render: p => p.facultyName },
-    { key: "capacity", header: "Capacité", render: p => p.studentCount },
   ]
-
-  if (facLoading || !faculties) return <Loader fullHeight />
 
   return (
     <div className="space-y-6">
@@ -133,7 +149,7 @@ export function SecretariatGeneralEntities() {
             <EmptyState icon={Building2} title="Aucune faculté" description="Commencez par ajouter une faculté." />
           ) : (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {faculties.map((f) => (
+              {faculties.map((f: any) => (
                 <Card key={f.id}>
                   <CardHeader>
                     <div className="flex items-center gap-3">
@@ -184,7 +200,6 @@ export function SecretariatGeneralEntities() {
         </TabsContent>
       </Tabs>
 
-      {/* Faculty Dialog */}
       <Dialog open={facOpen} onOpenChange={setFacOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Ajouter une faculté</DialogTitle></DialogHeader>
@@ -203,13 +218,14 @@ export function SecretariatGeneralEntities() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFacOpen(false)}>Annuler</Button>
-            <Button onClick={handleAddFaculty} disabled={!facForm.name || !facForm.code}>Créer</Button>
+            <Button variant="outline" onClick={() => setFacOpen(false)} disabled={isSubmitting}>Annuler</Button>
+            <Button onClick={handleAddFaculty} disabled={!facForm.name || !facForm.code || isSubmitting}>
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "Créer"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Promotion Dialog */}
       <Dialog open={promOpen} onOpenChange={setPromOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Nouvelle Promotion</DialogTitle></DialogHeader>
@@ -218,8 +234,7 @@ export function SecretariatGeneralEntities() {
               <Label>Nom de la promotion</Label>
               <Input value={promForm.name} onChange={e => setPromForm(f => ({ ...f, name: e.target.value }))} placeholder="ex: L1 Informatique" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+            <div className="space-y-2">
                 <Label>Niveau</Label>
                 <Select value={promForm.level} onValueChange={v => setPromForm(f => ({ ...f, level: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -229,18 +244,13 @@ export function SecretariatGeneralEntities() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Capacité</Label>
-                <Input type="number" value={promForm.studentCount} onChange={e => setPromForm(f => ({ ...f, studentCount: parseInt(e.target.value) }))} />
-              </div>
             </div>
             <div className="space-y-2">
               <Label>Faculté</Label>
               <Select value={promForm.facultyId} onValueChange={v => setPromForm(f => ({ ...f, facultyId: v }))}>
                 <SelectTrigger><SelectValue placeholder="Choisir une faculté..." /></SelectTrigger>
                 <SelectContent>
-                  {store.faculties.map(f => (
+                  {allFaculties.map((f: any) => (
                     <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -248,8 +258,10 @@ export function SecretariatGeneralEntities() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPromOpen(false)}>Annuler</Button>
-            <Button onClick={handleAddPromotion} disabled={!promForm.name || !promForm.facultyId}>Créer</Button>
+            <Button variant="outline" onClick={() => setPromOpen(false)} disabled={isSubmitting}>Annuler</Button>
+            <Button onClick={handleAddPromotion} disabled={!promForm.name || !promForm.facultyId || isSubmitting}>
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "Créer"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

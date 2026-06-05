@@ -7,24 +7,25 @@ import { StatusBadge } from "@/components/ui/StatusBadge"
 import { KPICard } from "@/components/ui/KPICard"
 import { Input } from "@/components/ui/input"
 import { usePageData } from "@/hooks/usePageData"
-import { useStore } from "@/hooks/usePageData"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { InscriptionDialog } from "@/pages/apparitorat/InscriptionDialog"
 import { Users, UserCheck, UserCog } from "lucide-react"
-import type { Student } from "@/types"
+import type { Student, AppData } from "@/types"
+import { Loader } from "@/components/ui/Loader"
 
 export function ApparitoratInscriptions() {
-  const store = useStore()
   const [query, setQuery] = useState("")
   const [facultyFilter, setFacultyFilter] = useState("all")
   const [promotionFilter, setPromotionFilter] = useState("all")
 
-  const { data, loading } = usePageData((d) => {
+  const { data, loading } = usePageData((d: AppData) => {
     const facultyName = (id: string) => d.faculties.find((f) => f.id === id)?.code ?? "—"
     const promotionName = (id: string) =>
       d.promotions.find((p) => p.id === id)?.name ?? "—"
     return {
       students: d.students,
+      faculties: d.faculties,
+      promotions: d.promotions,
       facultyName,
       promotionName,
     }
@@ -62,6 +63,8 @@ export function ApparitoratInscriptions() {
     }
   }, [data])
 
+  if (loading || !data) return <Loader fullHeight />
+
   const columns: Column<Student>[] = [
     {
       key: "matricule",
@@ -83,12 +86,12 @@ export function ApparitoratInscriptions() {
     {
       key: "faculty",
       header: "Faculté",
-      render: (s) => data?.facultyName(s.facultyId),
+      render: (s) => data.facultyName(s.facultyId),
     },
     {
       key: "promotion",
       header: "Promotion",
-      render: (s) => data?.promotionName(s.promotionId),
+      render: (s) => data.promotionName(s.promotionId),
     },
     {
       key: "average",
@@ -155,7 +158,7 @@ export function ApparitoratInscriptions() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Toutes facultés</SelectItem>
-              {store.faculties.map(f => <SelectItem key={f.id} value={f.id}>{f.code}</SelectItem>)}
+              {data.faculties.map((f: any) => <SelectItem key={f.id} value={f.id}>{f.code}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={promotionFilter} onValueChange={setPromotionFilter}>
@@ -164,7 +167,7 @@ export function ApparitoratInscriptions() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Toutes promotions</SelectItem>
-              {store.promotions.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              {data.promotions.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
