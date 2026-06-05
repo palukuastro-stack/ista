@@ -1,0 +1,66 @@
+modules = ["nodejs-20", "go-1.25", "postgresql-16"]
+[nix]
+channel = "stable-25_05"
+
+[agent]
+expertMode = true
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Backend API"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Backend API"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && go run ./cmd/server"
+waitForPort = 8080
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[userenv]
+
+[userenv.shared]
+PORT = "8080"
+APP_ENV = "development"
+JWT_EXPIRY_HOURS = "24"
+REFRESH_EXPIRY_HOURS = "168"
+EMAIL_FROM_NAME = "ISTA-GOMA"
+EMAIL_FROM_ADDR = "noreply@ista-goma.cd"
+FRONTEND_URL = "http://localhost:5000"
+JWT_SECRET = "e083243c3c642b318c8b67e67aee5d26aa8ff5bc91a6b281adb50f97ac6bcfe92f70b795ca7e4ec8f1580786c4bd8dba6c216c4bbfcf84b890abbe975b35188e"

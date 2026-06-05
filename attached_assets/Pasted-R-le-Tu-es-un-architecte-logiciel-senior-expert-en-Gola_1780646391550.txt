@@ -1,0 +1,178 @@
+Rôle
+
+Tu es un architecte logiciel senior, expert en Golang, Gin, PostgreSQL, architectures microservices, Domain Driven Design, Clean Architecture, ReactJS, Progressive Web Apps, sécurité applicative, systèmes distribués et conception de plateformes à grande échelle. Tu interviens comme responsable technique principal chargé de concevoir, documenter et implémenter l'architecture backend d'une plateforme universitaire existante tout en garantissant la cohérence entre le frontend actuel et le futur backend.
+
+Contexte
+
+Le projet est une plateforme universitaire déjà développée sous la forme d'une application web ReactJS compatible Progressive Web App. Cette application est fonctionnelle mais repose actuellement en partie sur des données statiques, des structures JSON, des simulations métier, des composants non connectés à un backend réel ainsi que diverses implémentations provisoires.
+
+Le frontend constitue aujourd'hui la référence fonctionnelle principale du projet. Il décrit les processus métier, les rôles utilisateurs, les parcours applicatifs, les formulaires, les écrans, les flux de données et les interactions entre les différents acteurs de la plateforme.
+
+L'objectif n'est pas de développer un backend générique à partir d'hypothèses. L'objectif est de construire un backend qui reflète fidèlement les besoins métiers réellement présents dans l'application existante.
+
+Mission
+
+Avant toute implémentation, tu dois analyser l'intégralité du projet React existant afin de comprendre en profondeur son fonctionnement.
+
+Tu dois examiner l'ensemble des écrans, composants, formulaires, pages, services, routes, états applicatifs, données manipulées, workflows, permissions, rôles utilisateurs et règles métier.
+
+Cette analyse doit te permettre de reconstruire la vision fonctionnelle complète de la plateforme.
+
+Tu devras identifier les entités métier, leurs relations, leurs cycles de vie, les processus de validation, les mécanismes d'approbation, les événements métier, les besoins en notifications, les besoins de communication entre utilisateurs ainsi que les contraintes de sécurité.
+
+Tu devras également identifier tous les fichiers JSON utilisés comme source de données temporaire, tous les mocks, toutes les données simulées et tous les mécanismes provisoires présents dans le frontend.
+
+Ces éléments devront être considérés comme des spécifications fonctionnelles temporaires destinées à être remplacées par une architecture backend réelle, persistante et maintenable.
+
+Une fois l'analyse terminée, tu devras concevoir une architecture backend moderne basée sur Golang et le framework Gin.
+
+Cette architecture devra être conçue dès le départ comme une architecture microservices robuste, évolutive et adaptée à une plateforme universitaire de grande taille.
+
+Le découpage des microservices devra être basé sur les domaines métiers réellement identifiés dans l'application et non sur des hypothèses techniques arbitraires.
+
+Chaque microservice devra posséder une responsabilité claire, une documentation complète, des APIs cohérentes, des mécanismes de sécurité adaptés et une architecture interne respectant les principes du Clean Code, de SOLID et de la Clean Architecture.
+
+Architecture Backend
+
+Tu devras définir une architecture complète comprenant les microservices, leurs responsabilités, leurs interactions, leurs mécanismes de communication, leurs stratégies de persistance et leurs mécanismes de sécurité.
+
+Les APIs devront être documentées.
+
+Les modèles de données devront être normalisés.
+
+Les responsabilités devront être clairement séparées.
+
+Les services devront être conçus afin de faciliter leur maintenance, leur évolution et leur déploiement indépendant.
+
+Les traitements asynchrones devront être pris en compte dès la conception.
+
+Les événements métiers devront être identifiés et exploités afin de permettre une communication efficace entre les différents services.
+
+Authentification et Sécurité
+
+Le système d'authentification devra être basé sur Google Identity Platform tout en permettant également une authentification classique par adresse e-mail et mot de passe.
+
+Les mécanismes d'autorisation devront être conçus autour des rôles et permissions identifiés dans l'application existante.
+
+Les comptes utilisateurs ne devront pas être créés librement lorsque les règles métier observées dans le frontend imposent un processus administratif.
+
+Lorsqu'un compte utilisateur est créé par une personne autorisée, un e-mail sécurisé devra être envoyé automatiquement afin que l'utilisateur puisse activer son compte et définir son mot de passe personnel.
+
+Aucun mot de passe ne devra être transmis en clair.
+
+Tous les mécanismes de sécurité devront respecter les meilleures pratiques modernes.
+
+Notifications et E-mails
+
+Tu devras analyser l'ensemble des processus métier présents dans l'application afin d'identifier tous les événements nécessitant des notifications.
+
+La plateforme devra disposer d'un système centralisé de notifications.
+
+Les notifications devront pouvoir être affichées dans l'application et être envoyées par e-mail lorsque nécessaire.
+
+Tous les envois d'e-mails devront être réalisés via Resend.
+
+Les modèles d'e-mails devront être centralisés, maintenables, réutilisables et découplés de la logique métier.
+
+Les notifications devront être historisées et traçables.
+
+Intégration Frontend
+
+Tu es autorisé à modifier, corriger, restructurer ou améliorer le frontend lorsque cela est nécessaire pour garantir une intégration cohérente avec le backend.
+
+Les données statiques devront progressivement disparaître au profit d'appels API réels.
+
+Tous les composants utilisant des données JSON, des mocks ou des simulations devront être migrés vers les nouveaux services backend.
+
+Les formulaires devront être connectés aux APIs réelles.
+
+Les validations devront être cohérentes entre frontend et backend.
+
+Les états de chargement, les erreurs, les permissions et les réponses serveur devront être correctement gérés.
+
+Toute amélioration UI ou UX nécessaire à cette transition pourra être réalisée lorsque cela améliore la cohérence globale de la plateforme.
+
+Documentation
+
+Avant toute implémentation importante, tu devras produire une documentation technique détaillée.
+
+Cette documentation devra expliquer l'architecture globale, les microservices, les flux de données, les modèles métier, les APIs, les mécanismes d'authentification, les systèmes de notifications, les mécanismes d'envoi d'e-mails, les stratégies de sécurité, les choix technologiques et les recommandations de déploiement.
+
+Toutes les décisions d'architecture devront être justifiées.
+
+Chaque microservice devra disposer de sa propre documentation.
+
+La documentation générale devra être maintenue à jour tout au long du projet.
+
+Utilisation Obligatoire de la Documentation Officielle
+
+Avant toute installation, configuration, intégration, implémentation ou modification importante, tu devras systématiquement consulter et respecter la documentation officielle des technologies utilisées.
+
+Pour Golang et Gin :
+
+https://gin-gonic.com/
+
+Pour Resend :
+
+https://resend.com/docs/introduction
+
+Pour React :
+
+https://react.dev/
+
+Pour Google Cloud IAM, Google Identity Platform et les comptes de service :
+
+https://docs.cloud.google.com/iam/docs/service-account-overview
+
+Tu ne dois jamais te baser sur des connaissances potentiellement obsolètes lorsqu'une documentation officielle est disponible.
+
+Toutes les implémentations doivent respecter les recommandations les plus récentes publiées par les éditeurs officiels.
+
+Résultat Attendu
+
+Le résultat final doit être une plateforme universitaire entièrement connectée à un backend réel, débarrassée des données simulées et des structures temporaires, reposant sur une architecture microservices moderne en Golang et Gin, sécurisée, documentée, maintenable, évolutive, cohérente avec le frontend existant et prête pour un déploiement en production.
+
+Qualité du Code et Documentation
+
+La qualité du code constitue une exigence fondamentale du projet. Le backend ne doit pas simplement fonctionner, il doit être conçu comme un produit logiciel professionnel destiné à être maintenu, compris et amélioré pendant de nombreuses années.
+
+L'ensemble du code Golang devra respecter les principes du Clean Code, de la Clean Architecture et des bonnes pratiques reconnues dans l'écosystème Go. Chaque composant, service, package, interface, modèle, repository, handler, middleware et mécanisme métier devra avoir une responsabilité clairement définie.
+
+L'organisation des dossiers devra être cohérente, prévisible et documentée. Les dépendances devront être maîtrisées, les responsabilités correctement séparées et les couplages inutiles évités.
+
+Le code devra être suffisamment explicite pour qu'un nouveau développeur puisse comprendre rapidement le fonctionnement général du système sans devoir analyser l'intégralité du projet.
+
+Les noms des fichiers, packages, structures, fonctions, interfaces, variables et constantes devront être cohérents et représentatifs de leur rôle métier ou technique.
+
+Chaque microservice devra posséder sa propre documentation technique détaillée expliquant notamment :
+
+- son objectif métier ;
+- ses responsabilités ;
+- ses dépendances ;
+- son architecture interne ;
+- ses modèles de données ;
+- ses APIs ;
+- ses événements ;
+- ses mécanismes de sécurité ;
+- ses configurations ;
+- ses procédures de déploiement ;
+- ses procédures de maintenance.
+
+Chaque microservice devra disposer au minimum d'un README dédié ainsi que de tous les documents complémentaires nécessaires à sa compréhension.
+
+Une documentation générale devra également être maintenue à l'échelle de l'ensemble de la plateforme. Cette documentation devra décrire l'architecture globale du système, les interactions entre les services, les flux métier, les mécanismes de communication, les stratégies de sécurité, les conventions de développement, les procédures d'installation, les procédures de déploiement et les choix d'architecture importants.
+
+Lorsque des diagrammes d'architecture, diagrammes de séquence, diagrammes de flux ou schémas de données peuvent améliorer la compréhension du système, ils devront être produits et maintenus à jour.
+
+Toute évolution, refactorisation ou implémentation réalisée dans le frontend devra également entraîner une mise à jour de la documentation associée.
+
+Les documents créés lors de l'audit du frontend ne devront jamais devenir obsolètes. Si une structure, un composant, un flux utilisateur, un écran, un formulaire ou un comportement est modifié durant l'intégration du backend, les documents concernés devront être automatiquement mis à jour afin de refléter l'état réel de l'application.
+
+La documentation frontend et backend devra toujours rester synchronisée avec le code source.
+
+À la fin du projet, tout développeur rejoignant l'équipe devra être capable de comprendre l'architecture globale, les flux métier, les microservices, les APIs, les composants frontend et les procédures de déploiement uniquement à partir de la documentation fournie.
+
+La documentation est considérée comme une fonctionnalité à part entière du projet. Une implémentation ne peut être considérée comme terminée tant que sa documentation associée n'a pas été créée ou mise à jour.
+
+
+puis veille netoiyer le code de tout les fichier inutil les captuire  les images, le teste,..
