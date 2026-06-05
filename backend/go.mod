@@ -1,8 +1,6 @@
 module github.com/ista-goma/platform
 
-go 1.25.9
-
-toolchain go1.25.9
+go 1.25.5
 
 require (
         github.com/gin-contrib/cors v1.7.7
